@@ -252,7 +252,7 @@ test('HTML diagram block keeps line breaks and equals the Markdown diagram sourc
   const html = files['index.html'];
   const un = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
   const blocks = [...html.matchAll(/<pre class="mermaid">([\s\S]*?)<\/pre>/g)].map((m) => un(m[1]));
-  assert.equal(blocks.length, 4);
+  assert.equal(blocks.length, 5);
   const md = files['lead-alerts-daily.md'];
   const mdSrc = /```mermaid\n([\s\S]*?)```/.exec(md)[1];
   assert.ok(blocks.some((b) => b.trim() === mdSrc.trim()));

@@ -118,7 +118,7 @@ test('CLI --from-dir: reads exports, skips junk, exit 1 when nothing found', asy
   fs.writeFileSync(path.join(src, 'other.json'), '{"hello":1}');
   const c = capture();
   assert.equal(await main(['--from-dir', src, '--out', out, '--date', '2026-01-01'], {}, c.io), 0);
-  assert.match(c.o[0], /Wrote 8 files for 5 workflow/);
+  assert.match(c.o[0], /Wrote 9 files for 6 workflow/);
   assert.equal(c.e.filter((l) => /skipped/.test(l)).length, 2);
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'empty-'));
   assert.equal(await main(['--from-dir', empty, '--out', out], {}, capture().io), 1);

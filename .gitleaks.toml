@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "synthetic demo key used to show the redaction behaviour"
+regexes = ['''Zq8wRt5Yu3Kp9mX2''']

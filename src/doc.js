@@ -293,7 +293,7 @@ function indexBlocks(items, opts = {}) {
   b.push({
     t: "note",
     kind: "info",
-    text: `${hidden} sticky note(s) ${includeNotes ? "included, redacted best-effort" : "hidden (use --include-notes to include them; they are then redacted best-effort)"}. ${redacted} name(s) were partly replaced with [redacted] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it.`,
+    text: `${hidden} sticky note(s) ${includeNotes ? "included, redacted best-effort" : "hidden (use --include-notes to include them; they are then redacted best-effort)"}. ${redacted} name(s) were partly replaced with [redacted] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it. ${opts.gitleaksNote || "independent gitleaks scan: not run"}.`,
   });
   b.push({ t: "h", l: 2, text: "Workflows" });
   b.push({

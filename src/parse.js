@@ -7,7 +7,7 @@ const {
   typeLabel,
 } = require("./rules");
 const { findSecrets, redactContacts, collectEnvRefs } = require("./secrets");
-const { sanitizeText, sanitizeIdent } = require("./policy");
+const { sanitizeText, sanitizeIdent, kwKind } = require("./policy");
 
 // Every user-written string goes through the NAME POLICY (src/policy.js).
 // Module state is set per analyzeWorkflow() call (the function is synchronous).
@@ -56,7 +56,10 @@ function safePath(path) {
 // Webhook paths act as bearer tokens: show only a short prefix unless asked
 function maskPath(path, show) {
   if (show || path.startsWith("(") || path.length <= 8) return path;
-  return path.slice(0, 4) + "\u2026";
+  // a prefix that spells a credential word or carries digits would read as a secret: show less
+  let prefix = (path.match(/^[A-Za-z]{1,4}/) || [""])[0];
+  if (kwKind(prefix)) prefix = "";
+  return prefix + "\u2026";
 }
 const { clean, trunc, uniq } = require("./util");
 const { describeCron } = require("./cron");
@@ -316,7 +319,7 @@ function analyzeWorkflow(wf, ctx = {}) {
             edges.push({
               from: s.id,
               to: d.id,
-              type: String(ctype),
+              type: scrubId(String(ctype)),
               out: outIdx,
             });
         });

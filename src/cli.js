@@ -3,7 +3,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { parseArgs } = require("node:util");
 const { generate, loadDir, writeFiles } = require("./generate");
-const { runGitleaks } = require("./gate");
+const { runGitleaks, gitleaksStatus } = require("./gate");
 const { fetchWorkflows, normaliseBase, scrubKey } = require("./api");
 
 const HELP = `n8n-handover-docs: generate a client handover pack from n8n workflows
@@ -131,9 +131,23 @@ async function main(argv, env = process.env, io = {}) {
     return 1;
   }
 
+  // independent second detector: fail closed if it is installed but broken, say so if it is absent
+  let glStatus = "skipped";
+  if (!args["no-gitleaks"]) {
+    glStatus = gitleaksStatus();
+    if (glStatus === "broken") {
+      err('gitleaks is installed but broken (it did not answer "gitleaks version"). Failing closed: nothing written. Fix or remove gitleaks, or pass --no-gitleaks to run without the second detector.');
+      return 3;
+    }
+    if (glStatus === "absent") err("warning: gitleaks was not found on PATH, so the independent gitleaks scan was not run (recommended: https://github.com/gitleaks/gitleaks). Use --no-gitleaks to silence this.");
+  }
+  const gitleaksNote =
+    glStatus === "available" ? "independent gitleaks scan: run, no findings" : glStatus === "absent" ? "independent gitleaks scan: not run (gitleaks not installed)" : "independent gitleaks scan: not run (--no-gitleaks)";
+
   let result;
   try {
     result = await generate(workflows, {
+      gitleaksNote,
       showHosts: !!args["show-hosts"],
       showWebhookPaths: !!args["show-webhook-paths"],
       redactContacts: !!args["redact-contacts"],
@@ -154,7 +168,7 @@ async function main(argv, env = process.env, io = {}) {
     return 1;
   }
   let gitleaksRan = false;
-  if (!args["no-gitleaks"]) {
+  if (glStatus === "available") {
     const g = runGitleaks(result.files);
     gitleaksRan = g.ran;
     result.findings.push(...g.findings);
@@ -178,7 +192,7 @@ async function main(argv, env = process.env, io = {}) {
   const hidden = result.items.reduce((n, { m }) => n + m.hiddenNotes, 0);
   const redacted = result.items.reduce((n, { m }) => n + m.redactedNames, 0);
   out(
-    `${hidden} sticky note(s) ${args["include-notes"] ? "included (best-effort redacted)" : "hidden (use --include-notes to include them)"}, ${redacted} name(s) partly redacted, final scan: built-in detector${gitleaksRan ? " + gitleaks" : " only (install gitleaks for a second opinion)"}, 0 findings.`,
+    `${hidden} sticky note(s) ${args["include-notes"] ? "included (best-effort redacted)" : "hidden (use --include-notes to include them)"}, ${redacted} name(s) partly redacted, final scan: built-in detector${gitleaksRan ? " + gitleaks" : " only"}, ${result.findings.length} finding(s).`,
   );
   out(
     `${nWarn} warning(s) to review before handover (see "Needs attention" in index.html).`,

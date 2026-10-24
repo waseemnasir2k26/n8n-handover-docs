@@ -7,3 +7,5 @@
 "Escalation to Slack","true","Slack","Slack bot","slackApi","Page on-call; Queue for morning"
 "Escalation to Slack","true","SMTP email","SMTP relay","smtp","Fallback email"
 "Error alert","true","Telegram","Alert bot","telegramApi","Tell the team"
+"CRM sync (hourly)","true","HTTP API (custom endpoint)","CRM API key","httpHeaderAuth","Push contacts api_key=[redacted]"
+"CRM sync (hourly)","true","Slack","Slack bot","slackApi","Tell the team"

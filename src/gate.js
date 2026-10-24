@@ -1,68 +1,93 @@
 "use strict";
-// INDEPENDENT final gate. Deliberately shares no code with the scrubber
-// (src/policy.js): it classifies every token of the finished output by character
-// classes, length and entropy, also after base64 / %-decoding, and looks for
-// credential words followed by a value-looking token. Reports file:line and a
-// kind, never the value. When gitleaks is on PATH it is run as a second,
+// INDEPENDENT final gate. Deliberately shares no logic with the scrubber (src/policy.js): it
+// classifies every token of the finished output by Unicode character classes, length and entropy
+// over code points, also after base64 / %-decoding, and looks for credential words (any supported
+// language) followed by a value-looking token, spaced digit runs and grouped numbers. Reports
+// file:line and a kind, never the value. When gitleaks is on PATH it is run as a second,
 // third-party detector over the same files.
 const cp = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { ALL_LABELS, CJK_LABELS, CODE_WORDS } = require("./labels");
 
-const WORDS =
-  /(pass|pwd|secret|token|apikey|api_key|auth|bearer|login|cred|private|\bpw\b|\bsk[-_])/i;
-const SPLIT = /[\s"'<>()[\]{},;|=:\\]+/;
-const STANDALONE =
-  /^(pass(word|wd|phrase|code)?|pwd|pw|secret|secrets|token|tokens|api[_-]?key|apikey|auth|authorization|bearer|login|credentials?|creds?|private|sk[-_].*)$/i;
+const LABEL_SET = new Set(ALL_LABELS);
+const SPLIT = /[\s"'<>()[\]{},;|=:\\：]+/;
+const EDGE = /^[^\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}]+$/gu;
+
+function codePoints(s) {
+  return [...s];
+}
 
 function shannon(s) {
   const m = new Map();
-  for (const c of s) m.set(c, (m.get(c) || 0) + 1);
+  const cps = codePoints(s);
+  for (const c of cps) m.set(c, (m.get(c) || 0) + 1);
   let h = 0;
-  for (const n of m.values()) h -= (n / s.length) * Math.log2(n / s.length);
+  for (const n of m.values()) h -= (n / cps.length) * Math.log2(n / cps.length);
   return h;
 }
 
 function classes(t) {
   return (
-    (/[a-z]/.test(t) ? 1 : 0) +
-    (/[A-Z]/.test(t) ? 1 : 0) +
-    (/\d/.test(t) ? 1 : 0) +
-    (/[^A-Za-z0-9]/.test(t) ? 1 : 0)
+    (/\p{Ll}/u.test(t) ? 1 : 0) +
+    (/\p{Lu}/u.test(t) ? 1 : 0) +
+    (/\p{L}/u.test(t) && !/[\p{Ll}\p{Lu}]/u.test(t) ? 1 : 0) +
+    (/\p{N}/u.test(t) ? 1 : 0) +
+    (/[^\p{L}\p{N}]/u.test(t) ? 1 : 0)
   );
 }
 
 function isSlug(t) {
-  // lowercase words / short numbers joined by - . _ / (file names, anchors, ids like lg-04)
+  // words, numbers and short codes joined by - . _ / (file names, anchors, Customer-Support-Agent-2025, lg-04)
   return (
-    /^[a-z0-9]+([-._/][a-z0-9]+)+$/.test(t) &&
+    /^[\p{L}\p{N}]+([-._/][\p{L}\p{N}]+)+$/u.test(t) &&
     t
       .split(/[-._/]/)
-      .every((p) => p.length <= 14 && (p.match(/\d/g) || []).length <= 4)
+      .every(
+        (p) =>
+          /^\p{L}{1,18}$/u.test(p) ||
+          /^\p{N}{1,4}$/u.test(p) ||
+          /^[\p{L}\p{N}]{1,4}$/u.test(p),
+      )
   );
 }
 
+// file names and anchors the pack itself generates: safe-words + a 6-hex hash (flow-password-734a59.md)
+function packName(t) {
+  const m = /^#?(?:wf-)?(.+?)-[0-9a-f]{6}(?:-\d+)?(?:\.md)?$/.exec(t);
+  return !!m && (isSlug(m[1]) || /^\p{L}{1,18}$/u.test(m[1]));
+}
+
 function valueLike(t) {
-  const c = t.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9!@#$%^&*+~]+$/g, "");
-  if (c.length < 6) return false;
-  if (/^\[?redacted\]?$/i.test(c)) return false;
-  return (/\d/.test(c) && /[A-Za-z]/.test(c)) || /[!@#$%^&*+~]/.test(c);
+  if (packName(t.replace(/^[^\p{L}\p{N}#]+|[^\p{L}\p{N}]+$/gu, "")))
+    return false;
+  const c = t.replace(
+    /^[^\p{L}\p{N}!@#$%^&*+~]+|[^\p{L}\p{N}!@#$%^&*+~]+$/gu,
+    "",
+  );
+  if (codePoints(c).length < 6) return false;
+  if (/^\[?redacted\]?$/i.test(c) || isSlug(c)) return false;
+  return (/\p{N}/u.test(c) && /\p{L}/u.test(c)) || /[!@#$%^&*+~]/.test(c);
 }
 
 function suspiciousToken(t, depth = 0) {
-  const c = t.replace(/^[^A-Za-z0-9]+/, "").replace(/[.,;)\]}>'"…_/-]+$/, "");
-  if (c.length < 8) return null;
-  const digits = (c.match(/\d/g) || []).length;
-  const alpha = /[A-Za-z]/.test(c);
+  const c = t
+    .replace(/^[^\p{L}\p{N}]+/u, "")
+    .replace(/[.,;)\]}>'"…_/-]+$/u, "");
+  const len = codePoints(c).length;
+  if (len < 8) return null;
+  if (packName(c)) return null;
+  const digits = (c.match(/\p{N}/gu) || []).length;
+  const letters = /\p{L}/u.test(c);
   if (/[0-9a-fA-F]{16,}/.test(c)) return "hex run";
   if (!isSlug(c)) {
-    if (c.length >= 20 && digits >= 2 && classes(c) >= 3 && shannon(c) >= 3.4)
+    if (len >= 20 && digits >= 2 && classes(c) >= 3 && shannon(c) >= 3.4)
       return "high-entropy token";
-    if (c.length >= 12 && alpha && digits >= 2) return "letters+digits token";
-    if (c.length >= 8 && alpha && digits >= 1 && /[!@#$%^&*+~?]/.test(c))
+    if (len >= 12 && letters && digits >= 2) return "letters+digits token";
+    if (len >= 8 && letters && digits >= 1 && /[!@$%^&*+~?]/.test(c))
       return "password-like token";
-    if (c.length >= 10 && /[a-z]/.test(c) && /[A-Z]/.test(c) && digits >= 2)
+    if (len >= 10 && /\p{Ll}/u.test(c) && /\p{Lu}/u.test(c) && digits >= 2)
       return "mixed-case+digit token";
   }
   if (depth < 2) {
@@ -71,7 +96,8 @@ function suspiciousToken(t, depth = 0) {
         const d = decodeURIComponent(c);
         const r =
           suspiciousToken(d, depth + 1) ||
-          (WORDS.test(d) && d.split(SPLIT).some(valueLike)
+          (d.split(SPLIT).some((x) => LABEL_SET.has(x.toLowerCase())) &&
+          d.split(SPLIT).some(valueLike)
             ? "url-encoded credential"
             : null);
         if (r) return `url-decoded ${r}`;
@@ -89,7 +115,7 @@ function suspiciousToken(t, depth = 0) {
       if (buf.length >= 8 && p / buf.length >= 0.85) {
         const d = buf.toString("latin1");
         if (
-          WORDS.test(d) ||
+          d.split(/[^A-Za-z]+/).some((x) => LABEL_SET.has(x.toLowerCase())) ||
           /\d/.test(d) ||
           d.includes(":") ||
           suspiciousToken(d, depth + 1)
@@ -103,6 +129,7 @@ function suspiciousToken(t, depth = 0) {
 
 function decodeLine(raw) {
   return raw
+    .normalize("NFKC")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
@@ -114,6 +141,11 @@ function decodeLine(raw) {
     .replace(/#(\d{2,3});/g, (m, d) => String.fromCharCode(+d)) // Mermaid entities
     .replace(/\\([\\`*_[\]<>|~&#+\-=.!(){}])/g, "$1");
 }
+
+const labelWord = (t) => {
+  const w = t.replace(EDGE, "").toLowerCase();
+  return LABEL_SET.has(w) || LABEL_SET.has(w.replace(/[-_\s]/g, ""));
+};
 
 /** Scan one text. Returns [{line, kind}] */
 function scanText(text) {
@@ -130,19 +162,50 @@ function scanText(text) {
           hits.push({ line: i + 1, kind });
         }
       };
+      // CJK / Hangul / Kana labels inside tokens: 密码是蓝天白云88, パスワード:さくら77
+      for (const lab of CJK_LABELS) {
+        const at = line.indexOf(lab);
+        if (
+          at >= 0 &&
+          /\p{N}|[A-Za-z]/u.test(
+            line.slice(at + lab.length, at + lab.length + 24),
+          )
+        )
+          add("credential label followed by a value");
+      }
+      // spaced digit runs (4 8 1 5 9 2) and grouped numbers (cards, IBANs)
+      let run = 0;
+      let grp = 0;
+      for (const t of tokens) {
+        run = /^\p{Nd}$/u.test(t) ? run + 1 : 0;
+        grp = /^\d{3,4}$/.test(t) ? grp + 1 : 0;
+        if (run === 5) add("spaced digit run");
+        if (grp === 3) add("grouped number");
+      }
+      if (/\b\d{3}-\d{2}-\d{4}\b/.test(line)) add("SSN-like number");
       tokens.forEach((t, k) => {
         const r = suspiciousToken(t);
         if (r) add(r);
-        if (
-          STANDALONE.test(t.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "")) &&
-          !/^\[?redacted/i.test(t)
-        ) {
-          for (const nx of tokens.slice(k + 1, k + 6)) {
+        // a label of one, two or three words (password, kata sandi, mot de passe)
+        let span = 0;
+        if (labelWord(t)) span = 1;
+        else if (labelWord(t + (tokens[k + 1] || ""))) span = 2;
+        else if (labelWord(t + (tokens[k + 1] || "") + (tokens[k + 2] || "")))
+          span = 3;
+        if (span && !/^\[?redacted/i.test(t)) {
+          for (const nx of tokens.slice(k + span, k + span + 5)) {
+            if (/^\\?\[?redacted/i.test(nx)) break;
             if (valueLike(nx)) {
               add("credential word followed by a value");
               break;
             }
           }
+        }
+        if (CODE_WORDS.has(t.replace(EDGE, "").toLowerCase())) {
+          let d = 0;
+          for (const nx of tokens.slice(k + 1, k + 10))
+            d += /^\p{Nd}$/u.test(nx) ? 1 : 0;
+          if (d >= 4) add("code label followed by spaced digits");
         }
       });
     });
@@ -170,21 +233,39 @@ function scanPack(files, { mermaidUrl = "", mermaidSri = "" } = {}) {
   return out;
 }
 
-function gitleaksAvailable() {
+/** 'available' | 'absent' | 'broken' */
+function gitleaksStatus() {
   try {
     const r = cp.spawnSync("gitleaks", ["version"], {
       encoding: "utf8",
       timeout: 15000,
     });
-    return r.status === 0;
+    if (r.error) return r.error.code === "ENOENT" ? "absent" : "broken";
+    return r.status === 0 ? "available" : "broken";
   } catch {
-    return false;
+    return "broken";
   }
 }
+const gitleaksAvailable = () => gitleaksStatus() === "available";
 
-/** Run gitleaks over the finished pack (written to a temp dir). Returns {ran, findings} */
+/** Run gitleaks over the finished pack (written to a temp dir). Returns {ran, status, findings} */
 function runGitleaks(files) {
-  if (!gitleaksAvailable()) return { ran: false, findings: [] };
+  const status = gitleaksStatus();
+  if (status === "absent") return { ran: false, status, findings: [] };
+  if (status === "broken") {
+    return {
+      ran: false,
+      status,
+      findings: [
+        {
+          file: "(gitleaks)",
+          line: 0,
+          kind: 'gitleaks is installed but broken (it did not answer "gitleaks version"); failing closed',
+          source: "gitleaks",
+        },
+      ],
+    };
+  }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "handover-gate-"));
   const report = `${dir}.json`;
   try {
@@ -220,11 +301,11 @@ function runGitleaks(files) {
       findings.push({
         file: "(gitleaks)",
         line: 0,
-        kind: "gitleaks failed to run; treated as a finding",
+        kind: "gitleaks failed to run; failing closed",
         source: "gitleaks",
       });
     }
-    return { ran: true, findings };
+    return { ran: true, status, findings };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.rmSync(report, { force: true });
@@ -236,5 +317,6 @@ module.exports = {
   scanPack,
   runGitleaks,
   gitleaksAvailable,
+  gitleaksStatus,
   suspiciousToken,
 };

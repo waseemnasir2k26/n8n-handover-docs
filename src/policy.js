@@ -1,27 +1,52 @@
 "use strict";
-// NAME POLICY: every user-written string that reaches the pack (workflow, node,
-// tag, credential and sub-workflow names, and notes when --include-notes is on)
-// is normalised first, then any suspicious span is replaced with [redacted].
-// Over-redacting is acceptable; leaking is not. Free text is not the product.
+// NAME POLICY. Every user-written string that reaches the pack (workflow, node, tag, credential and
+// sub-workflow names, and notes when --include-notes is on) is normalised first, then only the
+// suspicious VALUE is replaced with [redacted]. Credential words (English plus es, fr, de, pt, tr,
+// id, ru, ar, hi, ur, ja, ko, zh) are matched as whole tokens, never as substrings ("Passenger",
+// "Keyword", "Credit" are ordinary words), and a credential word alone is not a secret:
+// "Send Token Report" stays, "token: ghp_..." becomes "token: [redacted]".
 const { VALUE_PATTERNS } = require("./secrets");
-const { SERVICE_RULES } = require("./rules");
+const { STRONG, WEAK, CJK_LABELS, CODE_WORDS } = require("./labels");
 
-const STEMS = [
-  "pass",
-  "pw",
-  "pwd",
-  "secret",
-  "token",
-  "key",
-  "auth",
-  "cred",
-  "login",
-  "bearer",
-  "sk-",
-  "sk_",
-  "private",
-  "otp",
-];
+const CONNECTORS = new Set([
+  ":",
+  "=",
+  "=>",
+  "->",
+  "is",
+  "are",
+  "was",
+  "equals",
+  "-",
+  "–",
+  "—",
+  "/",
+  "→",
+  "for",
+  "the",
+  "of",
+  "to",
+  "a",
+  "an",
+  "my",
+  "your",
+  "our",
+  "是",
+  "为",
+]);
+const MARKERS = new Set([
+  ":",
+  "=",
+  "=>",
+  "->",
+  "is",
+  "are",
+  "was",
+  "equals",
+  "→",
+  "是",
+  "为",
+]);
 
 // Cyrillic / Greek letters that look like Latin ones. Used for MATCHING only.
 const CONFUSABLES = {
@@ -137,6 +162,13 @@ const INVISIBLE = new RegExp(
 );
 const CTRL = new RegExp("[\\u0000-\\u001f\\u007f-\\u009f]", "g");
 
+// Unicode-aware character classes: letters/marks/numbers in any script
+const L = "\\p{L}\\p{M}";
+const EDGE = new RegExp(`^[^${L}\\p{N}]+|[^${L}\\p{N}]+$`, "gu");
+const HAS_DIGIT = /\p{N}/u;
+const HAS_LETTER = /\p{L}/u;
+const SYMBOL = /[!@$%^&*+~]/;
+
 function cp(n) {
   try {
     return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : " ";
@@ -178,37 +210,40 @@ function fold(s) {
   for (const ch of String(s).toLowerCase()) out += CONFUSABLES[ch] || ch;
   return out;
 }
+// label sets folded the same way tokens are (look-alike letters become Latin), so matching is symmetric
+const foldLabel = (w) => fold(w).replace(/[-_\s]/g, "");
+const STRONG_F = new Set([...STRONG].map(foldLabel));
+const WEAK_F = new Set([...WEAK].map(foldLabel));
+
 function leet(s) {
   let out = "";
   for (const ch of s) out += LEET[ch] || ch;
   return out;
 }
 
-function hasStem(tok) {
-  const f = fold(tok);
-  const variants = [f, leet(f), f.split("").reverse().join("")];
-  for (const v of variants) {
-    for (const st of STEMS) {
-      if (st.length < 4 && v === variants[2]) continue; // reversed: only longer stems
-      if (v.includes(st)) return true;
-    }
-  }
-  return false;
-}
-
 function entropy(s) {
   const f = new Map();
-  for (const c of s) f.set(c, (f.get(c) || 0) + 1);
+  let n = 0;
+  for (const c of s) {
+    f.set(c, (f.get(c) || 0) + 1);
+    n++;
+  }
   let h = 0;
-  for (const n of f.values()) h -= (n / s.length) * Math.log2(n / s.length);
+  for (const k of f.values()) h -= (k / n) * Math.log2(k / n);
   return h;
 }
 
+// Words, numbers and short codes joined by - . _ / (lg-04, Customer-Support-Agent-2025, se-11c, v2-final)
 const slugLike = (t) =>
-  /^[a-z0-9]+([-.][a-z0-9]+)+$/.test(t) &&
+  /^[\p{L}\p{N}]+([-._/][\p{L}\p{N}]+)+$/u.test(t) &&
   t
-    .split(/[-.]/)
-    .every((p) => p.length <= 12 && (p.match(/\d/g) || []).length <= 3);
+    .split(/[-._/]/)
+    .every(
+      (p) =>
+        /^\p{L}{1,18}$/u.test(p) ||
+        /^\p{N}{1,4}$/u.test(p) ||
+        /^[\p{L}\p{N}]{1,4}$/u.test(p),
+    );
 
 function b64Decode(t) {
   if (!/^[A-Za-z0-9+/_-]{16,}={0,2}$/.test(t)) return null;
@@ -224,81 +259,118 @@ function b64Decode(t) {
   }
 }
 
-/** Token-level checks, independent of keywords. */
+const countDigits = (t) => (t.match(/\p{N}/gu) || []).length;
+const cpLen = (t) => [...t].length;
+
+/** Does this single token look like a secret value on its own? Independent of credential words. */
 function tokenSuspicious(tok, depth = 0, idMode = false) {
-  const t = tok.replace(/^[^A-Za-z0-9]+/, "").replace(/[.,;:)\]}>'"]+$/, "");
+  const t = tok.replace(/^[^\p{L}\p{N}]+/u, "").replace(/[.,;:)\]}>'"]+$/, "");
   if (!t) return false;
-  const letters = /[A-Za-z]/.test(t);
-  const digits = (t.match(/\d/g) || []).length;
-  const upper = /[A-Z]/.test(t);
-  const lower = /[a-z]/.test(t);
-  const symbol = /[!@#$%^&*+=~?]/.test(t);
+  const len = cpLen(t);
+  const letters = HAS_LETTER.test(t);
+  const digits = countDigits(t);
+  const upper = /\p{Lu}/u.test(t);
+  const lower = /\p{Ll}/u.test(t);
+  const symbol = SYMBOL.test(t);
   if (idMode) {
     // machine identifiers (camelCase types like googleSheetsOAuth2Api are normal)
     if (/[0-9a-fA-F]{16,}/.test(t)) return true;
-    if (t.length >= 16 && digits >= 3 && letters && !slugLike(t)) return true;
-    if (t.length >= 8 && letters && digits >= 1 && symbol) return true;
-    if (t.length >= 20 && entropy(t) >= 4.0 && digits >= 2) return true;
+    if (len >= 16 && digits >= 3 && letters && !slugLike(t)) return true;
+    if (len >= 8 && letters && digits >= 1 && symbol) return true;
+    if (len >= 20 && entropy(t) >= 4.0 && digits >= 2) return true;
     const d = depth < 2 ? b64Decode(t) : null;
     return !!(d && (/\d/.test(d) || d.includes(":")));
   }
-  if (t.length >= 12 && letters && digits >= 1 && !slugLike(t)) return true;
   if (/[0-9a-fA-F]{16,}/.test(t)) return true;
-  if (t.length >= 8 && letters && digits >= 1 && symbol) return true;
-  if (t.length >= 10 && upper && lower && digits >= 1 && !slugLike(t))
-    return true;
-  if (
-    t.length >= 16 &&
-    entropy(t) >= 3.5 &&
-    (digits >= 1 || (upper && lower)) &&
-    !slugLike(t)
-  )
-    return true;
+  if (!slugLike(t)) {
+    if (len >= 12 && letters && digits >= 2) return true;
+    if (len >= 8 && letters && digits >= 1 && symbol) return true;
+    if (len >= 10 && upper && lower && digits >= 2) return true;
+    if (
+      len >= 16 &&
+      entropy(t) >= 3.5 &&
+      (digits >= 1 || (upper && lower)) &&
+      !/^\p{L}+$/u.test(t)
+    )
+      return true;
+  }
   if (depth < 2) {
     const d = b64Decode(t);
-    if (d && (hasStem(d) || /\d/.test(d) || d.includes(":"))) return true;
+    if (
+      d &&
+      (kwKind(d.split(/[^A-Za-z0-9_]+/)[0]) || /\d/.test(d) || d.includes(":"))
+    )
+      return true;
   }
   return false;
 }
 
+/** 'strong' | 'weak' | null: is this whole token a credential word (any supported language)? */
+function kwKind(tok) {
+  const c = fold(String(tok).replace(EDGE, "")).replace(/[-_\s]/g, "");
+  if (!c || cpLen(c) > 24) return null;
+  const variants = [c];
+  if (/^[a-z0-9@$!]+$/.test(c)) {
+    variants.push(leet(c));
+    if (c.length >= 5) variants.push(c.split("").reverse().join(""));
+  }
+  for (const v of variants) if (STRONG_F.has(v)) return "strong";
+  for (const v of variants) if (WEAK_F.has(v)) return "weak";
+  return null;
+}
+
+// a value worth redacting when it follows a credential word
+function valueLike(tok) {
+  const c = tok.replace(/^["'`([{]+|["'`)\]},;.]+$/g, "");
+  if (cpLen(c) < 6 || /^\[?redacted\]?$/i.test(c)) return false;
+  if (/^v?\d+([.\-/]\d+)*$/i.test(c) || /^\d{4}-\d{2}-\d{2}/.test(c))
+    return false;
+  if (tokenSuspicious(c)) return true;
+  return (HAS_DIGIT.test(c) || SYMBOL.test(c)) && !slugLike(c);
+}
+const hasDigitOrSymbol = (t) => HAS_DIGIT.test(t) || SYMBOL.test(t);
+
 const redactedRe = /\[redacted\]/;
 
-// Stems that, alone, usually only label a credential ("API key", "Gmail OAuth").
-const WEAK = ["key", "token", "auth", "cred"];
-function weakStemOnly(tok) {
-  const f = fold(tok);
-  const strong = STEMS.filter((s) => !WEAK.includes(s));
-  const variants = [f, leet(f), f.split("").reverse().join("")];
-  return !variants.some((v, i) =>
-    strong.some((st) => !(st.length < 4 && i === 2) && v.includes(st)),
-  );
-}
-const SAFE = new Set(
-  (
-    "api key keys token tokens auth oauth oauth2 account accounts credential credentials bot service prod production test staging dev main backup new old " +
-    "read only read-only write readonly the a an for of and to my our client clients agency admin user app webhook header basic bearer refresh access " +
-    "v1 v2 v3 live demo shared team company default custom personal work site store shop email mail crm erp cms db database check verify validate refresh rotate renew get set send fetch sync update create delete list handle store load save run call use find lookup parse build add remove generate request exchange issue approve reset manage monitor expiry expire expired status " +
-    SERVICE_RULES.map((r) => r[1].toLowerCase()).join(" ")
-  ).split(/\s+/),
-);
-function safeWord(tok) {
-  const w = tok.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
-  if (!w) return true;
-  const l = w.toLowerCase();
-  return (
-    SAFE.has(l) ||
-    /^[A-Z]{2,6}[0-9]?$/.test(w) ||
-    /^v?\d{1,2}$/.test(w) ||
-    l.split(/[-_]/).every((p) => SAFE.has(p))
-  );
+// "s e c r e t :" -> "secret :" when the single letters spell a credential word
+function joinSpelled(tokens) {
+  const out = [];
+  for (let i = 0; i < tokens.length; i++) {
+    let j = i;
+    while (
+      j < tokens.length &&
+      j - i < 14 &&
+      /^[\p{L}\p{N}][:=]?$/u.test(tokens[j])
+    )
+      j++;
+    if (j - i >= 4) {
+      const letters = tokens
+        .slice(i, j)
+        .map((t) => t.replace(/[:=]$/, ""))
+        .join("");
+      if (kwKind(letters)) {
+        out.push(
+          letters +
+            (/[:=]$/.test(tokens[j - 1]) ? tokens[j - 1].slice(-1) : ""),
+        );
+        i = j - 1;
+        continue;
+      }
+    }
+    out.push(tokens[i]);
+  }
+  return out;
 }
 
+const isCjk = (t) => /[぀-ヿ㐀-鿿가-힯]/.test(t);
+
 /**
- * Sanitise a user-written string. kind: 'name' (default), 'note', 'id' (machine identifiers: no keyword rule).
- * counters.names is incremented when anything was replaced.
+ * Sanitise a user-written string. opts.kind: 'name' (default) or 'note' (stricter, used for sticky notes).
+ * counters.names counts distinct strings in which something was actually redacted.
  */
 function sanitizeText(input, opts = {}) {
   const maxLen = opts.maxLen || 160;
+  const noteMode = opts.kind === "note";
   let s = normalise(input);
   if (!s) return "";
   const before = s;
@@ -310,81 +382,251 @@ function sanitizeText(input, opts = {}) {
     /\b[a-z][a-z0-9+.-]{1,10}:\/\/[^\s/:@]+:[^\s/@]+@/gi,
     "[redacted]",
   );
-  const tokens = s.split(" ");
+  s = s.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[redacted]");
+  const tokens = joinSpelled(s.split(" "));
   const n = tokens.length;
   const mark = new Array(n).fill(false);
-  const idMode = opts.kind === "id";
-  const singles = tokens.filter((t) => t.length === 1).length;
-  if (
-    !idMode &&
-    singles >= 3 &&
-    STEMS.some((st) => st.length >= 4 && fold(tokens.join("")).includes(st))
-  ) {
-    if (opts.counters) opts.counters.names++;
-    return "[redacted]";
+  const partial = new Map();
+
+  // a whole name that is one short mixed token ("hunter22", "k9x!2q") is a password, not a name
+  if (n === 1 && !noteMode) {
+    const t = tokens[0];
+    const len = cpLen(t);
+    if (
+      len >= 5 &&
+      len <= 12 &&
+      HAS_LETTER.test(t) &&
+      !slugLike(t) &&
+      !redactedRe.test(t) &&
+      (countDigits(t) >= 2 || (countDigits(t) >= 1 && SYMBOL.test(t)))
+    ) {
+      mark[0] = true;
+    }
   }
+
+  // runs of spaced digits ("4 8 1 5 9 2") and grouped numbers (cards, IBANs)
+  for (let i = 0; i < n; ) {
+    let j = i;
+    while (j < n && /^\p{Nd}$/u.test(tokens[j])) j++;
+    if (j - i >= 5) for (let q = i; q < j; q++) mark[q] = true;
+    let g = i;
+    while (g < n && /^\d{3,4}$/.test(tokens[g])) g++;
+    if (g - i >= 3) for (let q = i; q < g; q++) mark[q] = true;
+    i = Math.max(i + 1, j, g);
+  }
+
   for (let i = 0; i < n; i++) {
     const t = tokens[i];
     if (!t) continue;
-    if (redactedRe.test(t)) mark[i] = true;
-    else if (!idMode && hasStem(t)) {
-      const lo = Math.max(0, i - 3);
-      const hi = Math.min(n - 1, i + 8);
-      // "CRM API key", "Gmail OAuth": a weak stem among plainly harmless words is a label, not a secret
-      let harmless = weakStemOnly(t) && /^[A-Za-z0-9_-]+$/.test(t);
-      for (let j = lo; harmless && j <= hi; j++) {
-        if (j !== i && (!safeWord(tokens[j]) || tokenSuspicious(tokens[j])))
-          harmless = false;
+    if (redactedRe.test(t)) {
+      mark[i] = true;
+      continue;
+    }
+    // CJK labels live inside tokens: 密码是蓝天白云88, パスワード:さくら77
+    if (isCjk(t)) {
+      const lab = CJK_LABELS.find((l) => t.includes(l));
+      if (lab) {
+        const idx = t.indexOf(lab) + lab.length;
+        const rest = t.slice(idx);
+        const explicit = /^[:=是为]/.test(rest);
+        const body = rest.replace(/^[:=是为\s]+/, "");
+        if (
+          body &&
+          (explicit || HAS_DIGIT.test(body) || /[A-Za-z]/.test(body))
+        ) {
+          partial.set(
+            i,
+            t.slice(0, idx) +
+              (rest.match(/^[:=是为]+/) || [""])[0] +
+              "[redacted]",
+          );
+          continue;
+        }
       }
-      if (!harmless) for (let j = lo; j <= hi; j++) mark[j] = true;
-    } else if (tokenSuspicious(t, 0, idMode)) mark[i] = true;
+    }
+    // attached assignment: api_key=VALUE, password:VALUE, "token":"VALUE"
+    const m = /^["'`]?([^:=\s"'`]{1,40})["'`]?([:=])["'`]?(.+)$/u.exec(t);
+    if (m && !t.includes("://") && kwKind(m[1])) {
+      partial.set(i, `${m[1]}${m[2]}[redacted]`);
+      continue;
+    }
+    if (
+      tokenSuspicious(t) ||
+      // notes are free text: any word welded to a digit and 8+ characters long is treated as a value
+      (noteMode &&
+        cpLen(t) >= 8 &&
+        HAS_LETTER.test(t) &&
+        HAS_DIGIT.test(t) &&
+        !slugLike(t) &&
+        !/^\d{1,2}[:.]\d{2}/.test(t) &&
+        !/^[\p{Sc}\d.,%/-]+$/u.test(t))
+    ) {
+      mark[i] = true;
+      continue;
+    }
+    // credential word: one token, or up to three joined (kata sandi, mot de passe, كلمة السر)
+    let k = kwKind(t);
+    let end = i;
+    if (!k) {
+      for (let w = 2; w <= 3 && i + w <= n && !k; w++) {
+        const parts = tokens.slice(i, i + w);
+        if (
+          parts.every(
+            (p) => cpLen(p.replace(EDGE, "")) <= 12 && !HAS_DIGIT.test(p),
+          )
+        ) {
+          const kk = kwKind(parts.join(""));
+          if (kk === "strong") {
+            k = kk;
+            end = i + w - 1;
+          }
+        }
+      }
+    }
+    if (!k) {
+      // code / pin / safe / door / alarm followed by a spaced digit run is handled above; also a bare label here
+      if (CODE_WORDS.has(fold(t.replace(EDGE, "")))) {
+        for (let q = i + 1; q < Math.min(n, i + 9); q++)
+          if (/^\p{Nd}$/u.test(tokens[q])) mark[q] = true;
+      }
+      continue;
+    }
+    let explicit = /[:=]$/.test(tokens[end]);
+    let j = end + 1;
+    for (let steps = 0; j < n && steps < 3; steps++) {
+      const low = tokens[j]
+        .toLowerCase()
+        .replace(/^[^\p{L}:=→\-–—/>]+|[^\p{L}:=→\-–—/>]+$/gu, "");
+      if (!CONNECTORS.has(low)) break;
+      if (MARKERS.has(low)) explicit = true;
+      if (
+        noteMode &&
+        (low === "-" || low === "/" || low === "–" || low === "—")
+      )
+        explicit = true;
+      j++;
+    }
+    if (
+      !explicit &&
+      k === "strong" &&
+      !/^(pass|sk)$/.test(foldLabel(tokens[end]))
+    ) {
+      // "the password for the CRM is tangerine": an assignment a few words later
+      for (let q = j; q < Math.min(n, end + 7); q++) {
+        if (MARKERS.has(tokens[q].toLowerCase())) {
+          explicit = true;
+          j = q + 1;
+          break;
+        }
+      }
+    }
+    if (j < n) {
+      if (noteMode && k === "strong") {
+        // notes are free text: after a password word take the next few words
+        for (let q = j; q < Math.min(n, j + (explicit ? 4 : 2)); q++) {
+          mark[q] = true;
+          if (/[.;]$/.test(tokens[q])) break;
+        }
+        // table headers and lists put the value several cells later
+        for (let q = j; q < Math.min(n, j + 10); q++)
+          if (valueLike(tokens[q])) mark[q] = true;
+      } else if (explicit && k === "strong" && !valueLike(tokens[j])) {
+        // "password is correct horse battery": a plain-word phrase assigned to a password word
+        for (let q = j; q < Math.min(n, j + 4); q++) {
+          mark[q] = true;
+          if (/[.;]$/.test(tokens[q])) break;
+        }
+      } else if (noteMode && explicit && k === "weak") {
+        for (let q = j; q < Math.min(n, j + 3); q++) {
+          if (/^[-/–—]$/.test(tokens[q])) continue;
+          mark[q] = true;
+        }
+      } else if (valueLike(tokens[j])) {
+        mark[j] = true;
+        if (
+          j + 1 < n &&
+          /^[^\s]{1,10}$/.test(tokens[j + 1]) &&
+          /[\p{N}!@$%^&*+~]/u.test(tokens[j + 1]) &&
+          !redactedRe.test(tokens[j + 1])
+        )
+          mark[j + 1] = true;
+      } else if (
+        explicit &&
+        hasDigitOrSymbol(tokens[j]) &&
+        cpLen(tokens[j]) >= 3
+      ) {
+        mark[j] = true;
+      }
+    }
+    if (k === "strong") {
+      for (let b = Math.max(0, i - 4); b < i; b++)
+        if (
+          valueLike(tokens[b]) ||
+          (HAS_DIGIT.test(tokens[b]) && cpLen(tokens[b]) >= 6)
+        )
+          mark[b] = true;
+    }
+    i = Math.max(i, end);
   }
   const out = [];
   for (let i = 0; i < n; i++) {
-    if (mark[i]) {
+    if (partial.has(i)) out.push(partial.get(i));
+    else if (mark[i]) {
       if (out[out.length - 1] !== "[redacted]") out.push("[redacted]");
     } else out.push(tokens[i]);
   }
   let res = out.join(" ");
-  if (res !== before && opts.counters) opts.counters.names++;
-  if (res.length > maxLen) res = res.slice(0, maxLen - 1) + "…";
+  if (res !== before && opts.counters) {
+    const c = opts.counters;
+    if (!c.seen) c.seen = new Set();
+    c.seen.add(before);
+    c.names = c.seen.size;
+  }
+  if (cpLen(res) > maxLen) res = [...res].slice(0, maxLen - 1).join("") + "…";
   return res;
 }
 
+const camelWords = (s) => s.match(/[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+/g) || [];
+
 /**
- * Machine identifiers (node types, credential types, env var and variable names, hostnames).
+ * Machine identifiers (node types, credential types, env var and variable names, connection types, hostnames).
  * Strict character set; anything else becomes "custom".
  */
 function sanitizeIdent(input, opts = {}) {
   const raw = String(input == null ? "" : input);
   const bad = () => {
-    if (opts.counters) opts.counters.names++;
+    if (opts.counters) {
+      const c = opts.counters;
+      if (!c.seen) c.seen = new Set();
+      c.seen.add(raw);
+      c.names = c.seen.size;
+    }
     return "custom";
   };
   if (!/^[A-Za-z0-9_.@/$-]{1,100}$/.test(raw)) return bad();
-  if (tokenSuspicious(raw, 0, true)) return bad();
-  const f = fold(raw);
-  const strong = STEMS.filter((s) => !WEAK.includes(s));
-  if (
-    /\d/.test(raw) &&
-    [f, leet(f), f.split("").reverse().join("")].some((v) =>
-      strong.some((st) => v.includes(st)),
-    )
-  )
+  if (raw.split(/[@/.]/).some((seg) => seg && tokenSuspicious(seg, 0, true)))
     return bad();
   for (const [, re] of VALUE_PATTERNS) {
     re.lastIndex = 0;
     if (re.test(raw)) return bad();
   }
+  // a credential word welded to digits (pass__Zq8wRt5Yu, passcode482910)
+  if (
+    /\d/.test(raw) &&
+    camelWords(raw.replace(/[_.\-/@$]/g, " ")).some(
+      (w) => kwKind(w) === "strong",
+    )
+  )
+    return bad();
   return raw;
 }
 
 module.exports = {
-  sanitizeIdent,
   normalise,
   fold,
   sanitizeText,
+  sanitizeIdent,
   tokenSuspicious,
-  hasStem,
-  STEMS,
+  kwKind,
+  valueLike,
 };

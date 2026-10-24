@@ -1,8 +1,8 @@
 # Demo Client
 
-Generated 2026-10-25. 4 workflow(s). Credential values and IDs are never copied into this pack.
+Generated 2026-10-25. 5 workflow(s). Credential values and IDs are never copied into this pack.
 
-> **Note:** 1 sticky note(s) hidden (use --include-notes to include them; they are then redacted best-effort). 3 name(s) were partly replaced with \[redacted\] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it.
+> **Note:** 1 sticky note(s) hidden (use --include-notes to include them; they are then redacted best-effort). 1 name(s) were partly replaced with \[redacted\] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it. independent gitleaks scan: run, no findings.
 
 ## Workflows
 
@@ -12,17 +12,18 @@ Generated 2026-10-25. 4 workflow(s). Credential values and IDs are never copied 
 | [Support chat agent](support-chat-agent.md) | yes | webhook | OpenAI, Stripe | 2 | no | 4 |
 | [Escalation to Slack](escalation-to-slack.md) | yes | subworkflow | Slack, SMTP email | 2 | no | 0 |
 | [Error alert](error-alert.md) | yes | error | Telegram | 1 | is one | 0 |
+| [CRM sync (hourly)](crm-sync-hourly.md) | yes | schedule | HTTP API (custom endpoint), Slack | 2 | yes | 0 |
 
 ## Credentials to transfer or recreate (names and types only)
 
 | Name | Type | Used in workflow(s) |
 | --- | --- | --- |
-| CRM API key | httpHeaderAuth | Lead alerts (daily) |
+| CRM API key | httpHeaderAuth | Lead alerts (daily), CRM sync (hourly) |
 | Owner Gmail | gmailOAuth2 | Lead alerts (daily) |
 | Sheets (agency) | googleSheetsOAuth2Api | Lead alerts (daily) |
 | OpenAI (client) | openAiApi | Support chat agent |
 | Stripe read-only | httpHeaderAuth | Support chat agent |
-| Slack bot | slackApi | Escalation to Slack |
+| Slack bot | slackApi | Escalation to Slack, CRM sync (hourly) |
 | SMTP relay | smtp | Escalation to Slack |
 | Alert bot | telegramApi | Error alert |
 

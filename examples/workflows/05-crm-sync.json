@@ -1,0 +1,72 @@
+{
+  "id": "wf-demo-0005-crm-sync",
+  "name": "CRM sync (hourly)",
+  "active": true,
+  "tags": [{ "id": "t1", "name": "client-demo" }],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Makassar",
+    "errorWorkflow": "wf-demo-0004-error-alert"
+  },
+  "nodes": [
+    {
+      "id": "e1",
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] }
+      }
+    },
+    {
+      "id": "e2",
+      "name": "Push contacts api_key=Zq8wRt5Yu3Kp9mX2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "parameters": {
+        "method": "POST",
+        "url": "https://crm.example-client.test/api/contacts/sync",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": { "id": "cred-SYNTH-91ab33c0", "name": "CRM API key" }
+      }
+    },
+    {
+      "id": "e3",
+      "name": "Tell the team",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [440, 0],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channel": "#ops"
+      },
+      "credentials": {
+        "slackApi": { "id": "cred-SYNTH-a2e19b00", "name": "Slack bot" }
+      }
+    }
+  ],
+  "connections": {
+    "Every hour": {
+      "main": [
+        [
+          {
+            "node": "Push contacts api_key=Zq8wRt5Yu3Kp9mX2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push contacts api_key=Zq8wRt5Yu3Kp9mX2": {
+      "main": [[{ "node": "Tell the team", "type": "main", "index": 0 }]]
+    }
+  }
+}

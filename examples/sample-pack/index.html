@@ -17,12 +17,12 @@ section.wf{margin-top:48px}button{font:inherit;padding:6px 12px;border:1px solid
 <body><main>
 <p><button onclick="window.print()">Print / save as PDF</button></p>
 <h1>Demo Client</h1>
-<p>Generated 2026-10-25. 4 workflow(s). Credential values and IDs are never copied into this pack.</p>
-<p class="note info"><strong>Note:</strong> 1 sticky note(s) hidden (use --include-notes to include them; they are then redacted best-effort). 3 name(s) were partly replaced with [redacted] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it.</p>
+<p>Generated 2026-10-25. 5 workflow(s). Credential values and IDs are never copied into this pack.</p>
+<p class="note info"><strong>Note:</strong> 1 sticky note(s) hidden (use --include-notes to include them; they are then redacted best-effort). 1 name(s) were partly replaced with [redacted] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it. independent gitleaks scan: run, no findings.</p>
 <h2>Workflows</h2>
-<div class="tw"><table><thead><tr><th>Workflow</th><th>Active</th><th>Trigger</th><th>Services</th><th>Credentials</th><th>Error workflow</th><th>Warnings</th></tr></thead><tbody><tr><td><a href="#wf-lead-alerts-daily">Lead alerts (daily)</a></td><td>yes</td><td>schedule</td><td>HTTP API (custom endpoint), Gmail, Google Sheets</td><td>3</td><td>yes</td><td>0</td></tr><tr><td><a href="#wf-support-chat-agent">Support chat agent</a></td><td>yes</td><td>webhook</td><td>OpenAI, Stripe</td><td>2</td><td>no</td><td>4</td></tr><tr><td><a href="#wf-escalation-to-slack">Escalation to Slack</a></td><td>yes</td><td>subworkflow</td><td>Slack, SMTP email</td><td>2</td><td>no</td><td>0</td></tr><tr><td><a href="#wf-error-alert">Error alert</a></td><td>yes</td><td>error</td><td>Telegram</td><td>1</td><td>is one</td><td>0</td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>Workflow</th><th>Active</th><th>Trigger</th><th>Services</th><th>Credentials</th><th>Error workflow</th><th>Warnings</th></tr></thead><tbody><tr><td><a href="#wf-lead-alerts-daily">Lead alerts (daily)</a></td><td>yes</td><td>schedule</td><td>HTTP API (custom endpoint), Gmail, Google Sheets</td><td>3</td><td>yes</td><td>0</td></tr><tr><td><a href="#wf-support-chat-agent">Support chat agent</a></td><td>yes</td><td>webhook</td><td>OpenAI, Stripe</td><td>2</td><td>no</td><td>4</td></tr><tr><td><a href="#wf-escalation-to-slack">Escalation to Slack</a></td><td>yes</td><td>subworkflow</td><td>Slack, SMTP email</td><td>2</td><td>no</td><td>0</td></tr><tr><td><a href="#wf-error-alert">Error alert</a></td><td>yes</td><td>error</td><td>Telegram</td><td>1</td><td>is one</td><td>0</td></tr><tr><td><a href="#wf-crm-sync-hourly">CRM sync (hourly)</a></td><td>yes</td><td>schedule</td><td>HTTP API (custom endpoint), Slack</td><td>2</td><td>yes</td><td>0</td></tr></tbody></table></div>
 <h2>Credentials to transfer or recreate (names and types only)</h2>
-<div class="tw"><table><thead><tr><th>Name</th><th>Type</th><th>Used in workflow(s)</th></tr></thead><tbody><tr><td>CRM API key</td><td>httpHeaderAuth</td><td>Lead alerts (daily)</td></tr><tr><td>Owner Gmail</td><td>gmailOAuth2</td><td>Lead alerts (daily)</td></tr><tr><td>Sheets (agency)</td><td>googleSheetsOAuth2Api</td><td>Lead alerts (daily)</td></tr><tr><td>OpenAI (client)</td><td>openAiApi</td><td>Support chat agent</td></tr><tr><td>Stripe read-only</td><td>httpHeaderAuth</td><td>Support chat agent</td></tr><tr><td>Slack bot</td><td>slackApi</td><td>Escalation to Slack</td></tr><tr><td>SMTP relay</td><td>smtp</td><td>Escalation to Slack</td></tr><tr><td>Alert bot</td><td>telegramApi</td><td>Error alert</td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>Name</th><th>Type</th><th>Used in workflow(s)</th></tr></thead><tbody><tr><td>CRM API key</td><td>httpHeaderAuth</td><td>Lead alerts (daily), CRM sync (hourly)</td></tr><tr><td>Owner Gmail</td><td>gmailOAuth2</td><td>Lead alerts (daily)</td></tr><tr><td>Sheets (agency)</td><td>googleSheetsOAuth2Api</td><td>Lead alerts (daily)</td></tr><tr><td>OpenAI (client)</td><td>openAiApi</td><td>Support chat agent</td></tr><tr><td>Stripe read-only</td><td>httpHeaderAuth</td><td>Support chat agent</td></tr><tr><td>Slack bot</td><td>slackApi</td><td>Escalation to Slack, CRM sync (hourly)</td></tr><tr><td>SMTP relay</td><td>smtp</td><td>Escalation to Slack</td></tr><tr><td>Alert bot</td><td>telegramApi</td><td>Error alert</td></tr></tbody></table></div>
 <h2>Environment variables and n8n variables to set</h2>
 <div class="tw"><table><thead><tr><th>Name</th><th>Used in workflow(s)</th></tr></thead><tbody><tr><td>$env.CRM_TENANT</td><td>Lead alerts (daily)</td></tr><tr><td>$env.ALERT_CHAT_ID</td><td>Error alert</td></tr></tbody></table></div>
 <h2>Workflow-to-workflow calls</h2>
@@ -250,6 +250,52 @@ section.wf{margin-top:48px}button{font:inherit;padding:6px 12px;border:1px solid
 <p>None.</p>
 <h3>When it breaks</h3>
 <div class="tw"><table><thead><tr><th>Area</th><th>Symptom</th><th>Likely cause</th><th>Where to look</th></tr></thead><tbody><tr><td>Telegram</td><td>Auth failed</td><td>Bot token or API key revoked/regenerated, or the bot was removed from the channel/chat</td><td>Node(s): Tell the team. Re-add the bot; replace the credential</td></tr><tr><td>Telegram</td><td>429 / flood limits</td><td>Provider send-rate limit (messages per second or per chat)</td><td>Node(s): Tell the team. Space out sends with a Wait node</td></tr><tr><td>Telegram</td><td>Message rejected</td><td>Message too long, bad formatting, or recipient opted out or is invalid</td><td>Node(s): Tell the team. Open the failed execution and read the response body</td></tr></tbody></table></div>
+<p>First step for any failure: n8n &gt; Executions &gt; filter by this workflow &gt; open the red execution &gt; the failing node is highlighted and its error text is on the right.</p>
+</section>
+<section class="wf" id="wf-crm-sync-hourly">
+<h2 id="wf-crm-sync-hourly">CRM sync (hourly)</h2>
+<p>This workflow runs on a schedule: every 1 hour(s) at minute 00 (timezone Asia/Makassar). Along the way it uses HTTP API (custom endpoint) and Slack. When it fails, an error workflow is notified.</p>
+<div class="tw"><table><thead><tr><th>Item</th><th>Value</th></tr></thead><tbody><tr><td>Active</td><td>yes</td></tr><tr><td>Nodes</td><td>3</td></tr><tr><td>Tags</td><td>client-demo</td></tr><tr><td>Trigger</td><td>Every hour (schedule)</td></tr><tr><td>Schedule</td><td>every 1 hour(s) at minute 00 (timezone Asia/Makassar)</td></tr></tbody></table></div>
+<h3>Flow</h3>
+<div class="diagram"><pre class="mermaid">flowchart TD
+  n0([&quot;Every hour&lt;br/&gt;Schedule trigger&quot;])
+  n1[&quot;Push contacts api_key=#91;redacted#93;&lt;br/&gt;HTTP Request&quot;]
+  n2[&quot;Tell the team&lt;br/&gt;Slack&quot;]
+  n0 --&gt; n1
+  n1 --&gt; n2
+  classDef trig fill:#e8f5e9,stroke:#2e7d32;
+  classDef sub fill:#f3e5f5,stroke:#6a1b9a;
+  classDef off fill:#eee,stroke:#999,color:#777,stroke-dasharray: 4 3;
+  class n0 trig;</pre></div><details class="srcbox"><summary>Diagram source (text fallback)</summary><pre class="src">flowchart TD
+  n0([&quot;Every hour&lt;br/&gt;Schedule trigger&quot;])
+  n1[&quot;Push contacts api_key=#91;redacted#93;&lt;br/&gt;HTTP Request&quot;]
+  n2[&quot;Tell the team&lt;br/&gt;Slack&quot;]
+  n0 --&gt; n1
+  n1 --&gt; n2
+  classDef trig fill:#e8f5e9,stroke:#2e7d32;
+  classDef sub fill:#f3e5f5,stroke:#6a1b9a;
+  classDef off fill:#eee,stroke:#999,color:#777,stroke-dasharray: 4 3;
+  class n0 trig;</pre></details>
+<h3>Steps</h3>
+<ol><li>Every hour: Schedule trigger. Next: Push contacts api_key=[redacted]</li><li>Push contacts api_key=[redacted]: HTTP Request, POST a custom endpoint (host hidden). Next: Tell the team</li><li>Tell the team: Slack, message / post</li></ol>
+<h3>External services</h3>
+<div class="tw"><table><thead><tr><th>Service</th><th>Used by node(s)</th><th>Credential(s) (name / type)</th></tr></thead><tbody><tr><td>HTTP API (custom endpoint)</td><td>Push contacts api_key=[redacted]</td><td>CRM API key / httpHeaderAuth</td></tr><tr><td>Slack</td><td>Tell the team</td><td>Slack bot / slackApi</td></tr></tbody></table></div>
+<h3>Credentials (names and types only, never values)</h3>
+<div class="tw"><table><thead><tr><th>Name</th><th>Type</th><th>Node(s)</th></tr></thead><tbody><tr><td>CRM API key</td><td>httpHeaderAuth</td><td>Push contacts api_key=[redacted]</td></tr><tr><td>Slack bot</td><td>slackApi</td><td>Tell the team</td></tr></tbody></table></div>
+<h3>Environment variables and n8n variables referenced</h3>
+<p>None.</p>
+<h3>Webhooks</h3>
+<p>None.</p>
+<h3>Error handling</h3>
+<ul><li>Error workflow: Error alert</li><li>Retry on fail: Push contacts api_key=[redacted] (max 3 tries)</li><li>Continue on fail: not used</li><li>Error output branch: not used</li></ul>
+<h3>Rate limits and caps</h3>
+<p>No explicit caps found in node settings.</p>
+<h3>Sub-workflows called</h3>
+<p>None.</p>
+<h3>Warnings</h3>
+<p>None.</p>
+<h3>When it breaks</h3>
+<div class="tw"><table><thead><tr><th>Area</th><th>Symptom</th><th>Likely cause</th><th>Where to look</th></tr></thead><tbody><tr><td>HTTP API (custom endpoint)</td><td>401 / 403</td><td>Token expired, key rotated, or header/auth settings changed</td><td>Node(s): Push contacts api_key=[redacted]. Check the credential attached to the request node</td></tr><tr><td>HTTP API (custom endpoint)</td><td>429 / 5xx / timeout</td><td>Remote API is rate limiting or down</td><td>Node(s): Push contacts api_key=[redacted]. Use retry-on-fail with wait; read Retry-After in the failed execution</td></tr><tr><td>HTTP API (custom endpoint)</td><td>Response shape changed</td><td>A field was renamed, so expressions downstream return undefined or empty</td><td>Node(s): Push contacts api_key=[redacted]. Open the failed execution, compare the response with the field the next node reads</td></tr><tr><td>HTTP API (custom endpoint)</td><td>DNS / TLS error</td><td>Endpoint moved or its certificate expired</td><td>Node(s): Push contacts api_key=[redacted]. Open the URL from the n8n server</td></tr><tr><td>Slack</td><td>Auth failed</td><td>Bot token or API key revoked/regenerated, or the bot was removed from the channel/chat</td><td>Node(s): Tell the team. Re-add the bot; replace the credential</td></tr><tr><td>Slack</td><td>429 / flood limits</td><td>Provider send-rate limit (messages per second or per chat)</td><td>Node(s): Tell the team. Space out sends with a Wait node</td></tr><tr><td>Slack</td><td>Message rejected</td><td>Message too long, bad formatting, or recipient opted out or is invalid</td><td>Node(s): Tell the team. Open the failed execution and read the response body</td></tr><tr><td>Schedule trigger</td><td>Run did not fire</td><td>Workflow is inactive (it deactivates if saved with errors, or after import), n8n was down at the scheduled time (missed runs are not replayed), or the timezone differs from what you expect</td><td>Node(s): Every hour. Check the workflow Active toggle, the n8n timezone setting, and Executions around the expected time</td></tr></tbody></table></div>
 <p>First step for any failure: n8n &gt; Executions &gt; filter by this workflow &gt; open the red execution &gt; the failing node is highlighted and its error text is on the right.</p>
 </section>
 <p class="note info">Generated by n8n-handover-docs. No credential values, credential IDs or API keys are written to this file.</p>

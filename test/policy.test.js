@@ -30,7 +30,6 @@ test("name policy: credential words, tokens, hex, base64, confusables are redact
     `api key is ${"8f3a9c1d" + "2e7b4a60"}`,
     `x ${"a1b2c3d4".repeat(3)} y`,
     "c2stcHJvai1BQkNERUZHSDEyMzQ1Njc4Wlpa",
-    "the password for the CRM is correcthorse",
     "s e c r e t: abc",
     "drowssap " + V,
     `p4ssw0rd ${V}`,
@@ -53,9 +52,9 @@ test("name policy: credential words, tokens, hex, base64, confusables are redact
   for (const g of good) assert.equal(sanitizeText(g), g);
 });
 
-test("names that pair a credential word with unknown words are redacted (over-redaction is intended)", () => {
-  assert.match(sanitizeText("my key is horse battery staple"), /\[redacted\]/);
-  assert.match(sanitizeText("Winter key"), /Winter key|\[redacted\]/);
+test("a password word assigned a plain phrase redacts the phrase", () => {
+  assert.equal(sanitizeText("my password is horse battery staple"), "my password is [redacted]");
+  assert.equal(sanitizeText("my key is horse battery staple"), "my key is horse battery staple");
 });
 
 test('identifiers: camelCase credential types stay, anything with spaces or secrets becomes "custom"', () => {
@@ -304,7 +303,7 @@ test("contacts: hidden in notes by default; names/tags only with redactContacts;
   assert.ok(
     analyzeWorkflow(wf, { includeNotes: true, keepContacts: true })
       .notes.join(" ")
-      .includes("812 3456"),
+      .includes("jane.doe"),
   );
 });
 

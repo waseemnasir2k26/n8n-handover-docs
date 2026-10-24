@@ -13,3 +13,5 @@
 - Rebuilt free-text handling as default-deny: sticky notes hidden unless `--include-notes`; names pass a normalising name policy; parameter text limited to fixed vocabularies.
 - Independent final gate (token classifier with base64/URL decoding, plus gitleaks when installed); exit 3 on any hit.
 - `npm run fuzz` adversarial corpus (800+ cases, 0 leaks with exit 0), `.gitattributes` eol=lf, local date and time zone in the pack header.
+- Name policy precision: credential words match whole tokens in 14 languages, only the value is redacted ("Send Token Report" stays), names stay distinguishable, files are safe words + short hash, counters count real redactions only. 65-name usefulness corpus: 0 false redactions.
+- Gate and scrubber: script-agnostic token checks, spaced digit runs, cards/IBANs, whole-name short passwords, connection and node types sanitised, gitleaks fails closed when broken and is flagged in the header when absent.

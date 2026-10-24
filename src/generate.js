@@ -88,7 +88,7 @@ async function generate(workflows, opts = {}) {
       redactContacts: !!opts.redactContacts,
       keepContacts: !!opts.keepContacts,
     });
-    return { m, slug: slugify(m.name, taken) };
+    return { m, slug: slugify(m.name, taken, (wf && wf.id) || (wf && wf.name)) };
   });
   const slugByName = new Map(items.map(({ m, slug }) => [m.name, slug]));
   const date = opts.date || localStamp();
@@ -109,7 +109,7 @@ async function generate(workflows, opts = {}) {
     sections.push({ slug, blocks });
     files[`${slug}.md`] = "[Back to index](index.md)\n\n" + blocksToMd(blocks);
   }
-  const idx = indexBlocks(items, { title, date });
+  const idx = indexBlocks(items, { title, date, gitleaksNote: opts.gitleaksNote });
   files["index.md"] = blocksToMd(idx);
   files["index.html"] = htmlPage({
     title,
