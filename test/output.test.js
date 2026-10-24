@@ -155,7 +155,7 @@ test("HTML: everything from workflow JSON is escaped; CSP present; CDN pinned wi
     await generate([hostile()], { date: "2026-01-01", offline: true })
   ).files["index.html"];
   assert.ok(!/<script/.test(off));
-  assert.match(off, /Diagram source/);
+  assert.match(off, /Diagram shown as text: --offline was used/);
   assert.match(html, /@media print/);
 });
 

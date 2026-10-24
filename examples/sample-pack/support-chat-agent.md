@@ -64,7 +64,7 @@ None.
 
 | Node | Method | Path | URL | Auth | Responds |
 | --- | --- | --- | --- | --- | --- |
-| Chat webhook | POST | support-chat | https://&lt;your-n8n-host&gt;/webhook/support-chat | none | lastNode |
+| Chat webhook | POST | supp… | https://&lt;your-n8n-host&gt;/webhook/supp… | none | lastNode |
 
 ### Error handling
 
@@ -108,7 +108,7 @@ None.
 | Stripe | 401 / 403 auth failure | API key rotated, revoked, or the plan/permissions changed | Node(s): Look up order. Replace the key in the credential; test the node |
 | Stripe | 429 / rate limited | Plan limit or per-minute limit reached | Node(s): Look up order. Check provider usage page; add Wait or batching |
 | Stripe | Schema change | Field renamed, ID deleted, or API version retired | Node(s): Look up order. Open the failing node, run it with the last input, read the error body |
-| Webhook trigger | Webhook not reached or returns 404 | Workflow inactive, or the sender uses the test URL instead of the production URL, or the path changed | Node(s): Chat webhook. Check Active toggle and the exact path/method shown in this document |
+| Webhook trigger | Webhook not reached or returns 404 | Workflow inactive, or the sender uses the test URL instead of the production URL, or the path changed | Node(s): Chat webhook. Check Active toggle and the method and path shown in this document (path shortened unless --show-webhook-paths) |
 | Webhook trigger | Anyone who knows the URL can trigger it | Webhook has no authentication configured | Node(s): Chat webhook. Add header or basic auth on the Webhook node, or validate a shared secret in the first node |
 | Sub-workflows | Sub-workflow call fails | The called workflow is inactive, renamed, deleted, or expects different input fields. Its error shows as a failure of the caller | Node(s): Escalate to human. Open the called workflow and its latest execution; compare input fields |
 | AI agent | AI agent loops, stalls or returns nonsense | Iteration cap reached, a tool errored, or the model passed bad arguments to a tool | Node(s): Support agent. Open the failed execution and read the agent step-by-step log; check each tool node separately |

@@ -6,6 +6,8 @@ const { workflowBlocks, indexBlocks } = require("./doc");
 const { blocksToMd, htmlPage, inventoryCsv } = require("./render");
 const { slugify } = require("./util");
 const { summarize } = require("./llm");
+const { scanText } = require("./secrets");
+const { MERMAID_URL, MERMAID_SRI } = require("./render");
 
 function unwrap(j) {
   if (Array.isArray(j)) return j.flatMap(unwrap);
@@ -81,6 +83,9 @@ async function generate(workflows, opts = {}) {
       idToName,
       showHosts: !!opts.showHosts,
       baseUrl: opts.baseUrl,
+      showWebhookPaths: !!opts.showWebhookPaths,
+      redactContacts: !!opts.redactContacts,
+      keepContacts: !!opts.keepContacts,
     });
     return { m, slug: slugify(m.name, taken) };
   });
@@ -109,7 +114,8 @@ async function generate(workflows, opts = {}) {
     title,
     indexBlocks: idx,
     sections,
-    offline: !!opts.offline,
+    offline: !!opts.offline || !!opts.diagramFallback,
+    fallbackReason: opts.offline ? "--offline was used, so no script is loaded" : opts.diagramFallback ? "--diagram-fallback was used" : "",
   });
   files["inventory.csv"] = inventoryCsv(items);
 
@@ -128,7 +134,18 @@ async function generate(workflows, opts = {}) {
     warnings.push(
       `removed ${leaks} accidental occurrence(s) of an id or key from the output`,
     );
-  return { files, items, warnings };
+  const findings = scanPack(files);
+  return { files, items, warnings, findings };
+}
+
+/** Final gate: run the secret detector over every rendered file. Returns [{file,line,kind}] (no values). */
+function scanPack(files) {
+  const out = [];
+  for (const [file, content] of Object.entries(files)) {
+    const text = file.endsWith(".html") ? content.split(MERMAID_URL).join("").split(MERMAID_SRI).join("") : content;
+    for (const h of scanText(text)) out.push({ file, line: h.line, kind: h.kind });
+  }
+  return out;
 }
 
 function writeFiles(outDir, files) {
@@ -140,4 +157,5 @@ function writeFiles(outDir, files) {
   }
 }
 
-module.exports = { generate, loadDir, writeFiles, unwrap, forbiddenStrings };
+module.exports = {
+  scanPack, generate, loadDir, writeFiles, unwrap, forbiddenStrings };

@@ -366,7 +366,7 @@ const BUILTIN_NOTES = {
   webhook: [
     "Webhook not reached or returns 404",
     "Workflow inactive, or the sender uses the test URL instead of the production URL, or the path changed",
-    "Check Active toggle and the exact path/method shown in this document",
+    "Check Active toggle and the method and path shown in this document (path shortened unless --show-webhook-paths)",
   ],
   "webhook-open": [
     "Anyone who knows the URL can trigger it",

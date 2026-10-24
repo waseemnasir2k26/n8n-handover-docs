@@ -53,7 +53,7 @@ test("error workflow name is resolved when the set contains it", () => {
 });
 
 test("Webhook -> AI Agent with sub-nodes: ai_* connections point sub-node -> agent", () => {
-  const m = analyzeWorkflow(example("02-support-agent.json"));
+  const m = analyzeWorkflow(example("02-support-agent.json"), { showWebhookPaths: true });
   assert.equal(
     edge(m, "OpenAI Chat Model", "Support agent").type,
     "ai_languageModel",
@@ -96,6 +96,7 @@ test("webhook host shown only with showHosts", () => {
   const shown = analyzeWorkflow(wf, {
     baseUrl: "https://n8n.example.test",
     showHosts: true,
+    showWebhookPaths: true,
   });
   assert.equal(
     shown.webhooks[0].url,

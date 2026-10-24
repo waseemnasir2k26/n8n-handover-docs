@@ -1,5 +1,6 @@
 "use strict";
 const path = require("node:path");
+const fs = require("node:fs");
 const { parseArgs } = require("node:util");
 const { generate, loadDir, writeFiles } = require("./generate");
 const { fetchWorkflows, normaliseBase, scrubKey } = require("./api");
@@ -22,6 +23,11 @@ Output:
   --out <folder>        default ./handover  (index.html, index.md, <workflow>.md, inventory.csv)
   --title <text>        title of the pack (e.g. the client name)
   --show-hosts          show real hostnames (webhook URLs, HTTP endpoints). Default: hidden
+  --show-webhook-paths  print full webhook paths (default: first 4 characters, they act as bearer tokens)
+  --redact-contacts     also hide e-mails and phone numbers in names, tags and credential names (sticky notes always, see --keep-contacts)
+  --keep-contacts       do not hide e-mails and phone numbers in sticky notes
+  --allow-findings      write the pack even if the final secret scan finds something (exit code 3 otherwise)
+  --diagram-fallback    show diagrams as text only, with the reason, no script
   --offline             no CDN script in index.html; Mermaid diagrams stay as text
   --llm                 add a plain-English AI summary per workflow. Needs HANDOVER_OLLAMA_MODEL,
                         or GROQ_API_KEY, or GEMINI_API_KEY. Only names, types and connections are sent.
@@ -45,6 +51,11 @@ async function main(argv, env = process.env, io = {}) {
         out: { type: "string" },
         title: { type: "string" },
         "show-hosts": { type: "boolean" },
+        "show-webhook-paths": { type: "boolean" },
+        "redact-contacts": { type: "boolean" },
+        "keep-contacts": { type: "boolean" },
+        "allow-findings": { type: "boolean" },
+        "diagram-fallback": { type: "boolean" },
         offline: { type: "boolean" },
         llm: { type: "boolean" },
         date: { type: "string" },
@@ -99,7 +110,9 @@ async function main(argv, env = process.env, io = {}) {
         );
       }
     } else {
-      workflows = loadDir(path.resolve(args["from-dir"]), (w) =>
+      const dir = path.resolve(args["from-dir"]);
+      if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error(`Folder not found: ${args["from-dir"]}`);
+      workflows = loadDir(dir, (w) =>
         err(`warning: ${w}`),
       );
       if (limit) workflows = workflows.slice(0, limit);
@@ -117,6 +130,10 @@ async function main(argv, env = process.env, io = {}) {
   try {
     result = await generate(workflows, {
       showHosts: !!args["show-hosts"],
+      showWebhookPaths: !!args["show-webhook-paths"],
+      redactContacts: !!args["redact-contacts"],
+      keepContacts: !!args["keep-contacts"],
+      diagramFallback: !!args["diagram-fallback"],
       baseUrl,
       offline: !!args.offline,
       llm: !!args.llm,
@@ -129,6 +146,15 @@ async function main(argv, env = process.env, io = {}) {
   } catch (e) {
     err(`error: could not build the pack: ${scrubKey(e && e.message, apiKey)}`);
     return 1;
+  }
+  if (result.findings.length) {
+    err(`The final scan found ${result.findings.length} possible secret(s) in the generated pack (values not shown):`);
+    for (const f of result.findings.slice(0, 50)) err(`  ${f.file}:${f.line}  ${f.kind}`);
+    if (!args["allow-findings"]) {
+      err("Nothing was written. Fix the source workflow, or re-run with --allow-findings to write the pack anyway.");
+      return 3;
+    }
+    err("--allow-findings set: writing the pack anyway. Review those lines before sharing.");
   }
   const outDir = path.resolve(args.out || "handover");
   writeFiles(outDir, result.files);

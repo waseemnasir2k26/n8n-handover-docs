@@ -9,6 +9,7 @@
   },
   "main": "src/generate.js",
   "files": [
+    "scripts",
     "bin",
     "src",
     "examples",
@@ -21,6 +22,7 @@
   },
   "scripts": {
     "test": "node --test",
+    "demo:canary": "node scripts/canary.js",
     "demo": "node bin/n8n-handover-docs.js --from-dir examples/workflows --out examples/sample-pack --title \"Demo Client\" --date 2026-10-25"
   },
   "keywords": [

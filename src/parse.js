@@ -6,15 +6,37 @@ const {
   titleFromCamel,
   typeLabel,
 } = require("./rules");
-const { findSecrets, scrubText: scrubBase, collectEnvRefs } = require("./secrets");
+const { findSecrets, scrubText: scrubBase, redactContacts, collectEnvRefs } = require("./secrets");
 
-// Free text from a workflow (names, sticky notes) may contain URLs with the
-// client's hosts. Hide them unless --show-hosts. Set per analyzeWorkflow() call
-// (the function is synchronous, so module state is safe).
+// Free text from a workflow (names, sticky notes, tags) may contain URLs, contact
+// details and secrets. Module state is set per analyzeWorkflow() call (synchronous).
 let HIDE_URLS = true;
-function scrubText(t) {
-  const s = scrubBase(t);
+let CONTACTS_ALL = false;
+let CONTACTS_NOTES = true;
+function hideUrls(s) {
   return HIDE_URLS ? s.replace(/\bhttps?:\/\/[^\s)"'`<>\]]+/gi, "<url hidden>") : s;
+}
+// Free text: secrets, high-entropy tokens, URLs (and contacts with --redact-contacts)
+function scrubText(t) {
+  const s = hideUrls(scrubBase(t));
+  return CONTACTS_ALL ? redactContacts(s) : s;
+}
+// Machine identifiers (node types, credential types): no entropy rule
+function scrubId(t) {
+  return hideUrls(scrubBase(t, { entropy: false }));
+}
+// Sticky notes: free text, contacts hidden by default
+function scrubNote(t) {
+  const s = scrubText(t);
+  return CONTACTS_NOTES ? redactContacts(s) : s;
+}
+// Webhook paths act as bearer tokens: show only a short prefix unless asked
+function word(v) {
+  return /^[A-Za-z0-9/,_ -]{1,30}$/.test(String(v)) ? String(v) : "custom";
+}
+function maskPath(path, show) {
+  if (show || path.startsWith("(") || path.length <= 8) return path;
+  return path.slice(0, 4) + "\u2026";
 }
 const { clean, trunc, uniq } = require("./util");
 const { describeCron } = require("./cron");
@@ -208,9 +230,14 @@ function analyzeWorkflow(wf, ctx = {}) {
   ctx = {
     idToName: ctx.idToName || new Map(),
     showHosts: !!ctx.showHosts,
+    showWebhookPaths: !!ctx.showWebhookPaths,
+    redactContacts: !!ctx.redactContacts,
+    keepContacts: !!ctx.keepContacts,
     baseUrl: ctx.baseUrl || null,
   };
   HIDE_URLS = !ctx.showHosts;
+  CONTACTS_ALL = !!ctx.redactContacts;
+  CONTACTS_NOTES = ctx.keepContacts ? false : true;
   const warnings = [];
   const rawNodes = arr(wf && wf.nodes).filter(
     (n) => n && typeof n === "object",
@@ -237,9 +264,9 @@ function analyzeWorkflow(wf, ctx = {}) {
       id: `n${i}`,
       name,
       rawName: isStr(n.name) ? n.name : name,
-      type: scrubText(type),
-      short: scrubText(short),
-      typeLabel: scrubText(typeLabel(short)),
+      type: scrubId(type),
+      short: scrubId(short),
+      typeLabel: scrubId(typeLabel(short)),
       typeVersion: n.typeVersion,
       disabled: n.disabled === true,
       kind: "node",
@@ -351,7 +378,7 @@ function analyzeWorkflow(wf, ctx = {}) {
     for (const [ctype, cv] of Object.entries(obj(raw.credentials))) {
       const c = obj(cv);
       const entry = {
-        type: scrubText(ctype).slice(0, 80),
+        type: scrubId(ctype).slice(0, 80),
         name: scrubText(isStr(c.name) ? c.name : "(unnamed)").slice(0, 120),
       };
       creds.push(entry);
@@ -364,7 +391,7 @@ function analyzeWorkflow(wf, ctx = {}) {
     }
 
     if (n.kind === "note") {
-      const txt = scrubText(plain(p.content) || "");
+      const txt = scrubNote(plain(p.content) || "");
       if (txt) notes.push(trunc(txt, 400));
       continue;
     }
@@ -470,11 +497,7 @@ function analyzeWorkflow(wf, ctx = {}) {
       n.short === "formTrigger" ||
       n.short === "chatTrigger"
     ) {
-      const path = scrubText(
-        plain(p.path) ||
-          plain(p.formPath) ||
-          (raw.webhookId ? "(auto-generated path)" : "(dynamic path)"),
-      );
+      const path = maskPath(scrubText(plain(p.path) || plain(p.formPath) || (raw.webhookId ? "(auto-generated path)" : "(dynamic path)")), ctx.showWebhookPaths);
       const method =
         n.short === "webhook"
           ? String(
@@ -496,10 +519,10 @@ function analyzeWorkflow(wf, ctx = {}) {
       webhooks.push({
         node: n.name,
         path,
-        method,
-        auth,
+        method: word(method),
+        auth: word(auth),
         url: `${base}/${seg}/${path === "(auto-generated path)" ? "<id>" : path.replace(/^\//, "")}`,
-        responseMode: plain(p.responseMode) || "onReceived",
+        responseMode: word(plain(p.responseMode) || "onReceived"),
       });
       if (auth === "none" && n.short === "webhook")
         warnings.push(

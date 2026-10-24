@@ -31,6 +31,7 @@ function escPre(v) {
 
 function mdEsc(v) {
   return clean(v)
+    .replace(/\b(javascript|vbscript|data)\s*:/gi, "$1&#58;")
     .replace(/&/g, '&amp;')
     .replace(/[\\`*_[\]<>|~]/g, (c) => (c === '<' ? '&lt;' : c === '>' ? '&gt;' : '\\' + c))
     .replace(/^(\s*)([#+\-=]|\d+\.)/, '$1\\$2');

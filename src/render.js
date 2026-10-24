@@ -106,7 +106,7 @@ function blocksToHtml(blocks, ctx) {
       case "mermaid":
         out.push(
           ctx.offline
-            ? `<details open><summary>Diagram source (Mermaid text; paste into mermaid.live to view)</summary><pre class="src">${escPre(b.src)}</pre></details>`
+            ? `<details open><summary>Diagram shown as text: ${esc(ctx.fallbackReason || "no script available")}. Paste into mermaid.live to view.</summary><pre class="src">${escPre(b.src)}</pre></details>`
             : `<div class="diagram"><pre class="mermaid">${escPre(b.src)}</pre></div><details class="srcbox"><summary>Diagram source (text fallback)</summary><pre class="src">${escPre(b.src)}</pre></details>`,
         );
         break;
@@ -130,8 +130,8 @@ section.wf{margin-top:48px}button{font:inherit;padding:6px 12px;border:1px solid
 @page{margin:14mm}
 `;
 
-function htmlPage({ title, indexBlocks, sections, offline }) {
-  const ctx = { offline };
+function htmlPage({ title, indexBlocks, sections, offline, fallbackReason }) {
+  const ctx = { offline, fallbackReason };
   const csp = offline
     ? "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
     : "default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src https://cdn.jsdelivr.net 'unsafe-inline'; base-uri 'none'; form-action 'none'";
@@ -149,7 +149,7 @@ function htmlPage({ title, indexBlocks, sections, offline }) {
       var d=document.createElement('div');d.className='rendered';d.innerHTML=r.svg;
       el.parentNode.replaceChild(d,el);
     }).catch(function(){
-      var p=document.createElement('p');p.className='note warn';p.textContent='Diagram could not be drawn. The text version is below.';
+      var p=document.createElement('p');p.className='note warn';p.textContent='Diagram could not be drawn (the Mermaid script did not load or rejected the diagram). The text version is below.';
       el.parentNode.insertBefore(p,el);
       var sb=el.parentNode.parentNode.querySelector('.srcbox');if(sb){sb.open=true;}
     });

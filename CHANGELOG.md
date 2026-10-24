@@ -7,3 +7,6 @@
 - Outputs: `index.html` (print CSS), `index.md`, `<workflow>.md`, `inventory.csv`.
 - Optional `--llm` summaries via Ollama, Groq or Gemini (structure only).
 - Redaction: no credential values or IDs, secrets masked by location, hosts hidden unless `--show-hosts`.
+- Final scan of every rendered file with the full secret detector (exit 3 and nothing written unless `--allow-findings`).
+- Free-text scrubbing for unquoted `key: value`, `key is value`, `Authorization: Token x`, and high-entropy tokens; webhook paths shortened unless `--show-webhook-paths`; e-mails and phone numbers hidden in sticky notes (`--redact-contacts`, `--keep-contacts`).
+- `npm run demo:canary`, `--diagram-fallback`, clear "Folder not found" message.
