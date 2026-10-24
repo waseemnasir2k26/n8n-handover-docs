@@ -46,7 +46,7 @@ const wf = {
 };
 
 (async () => {
-  const { files, findings } = await generate([wf], { date: "2026-01-01" });
+  const { files, findings } = await generate([wf], { date: "2026-01-01", includeNotes: true });
   const all = Object.values(files).join("\n");
   console.log(
     `Step 1: generated ${Object.keys(files).length} files from a workflow with ${Object.keys(canaries).length} planted secrets`,

@@ -6,7 +6,7 @@ const { workflowBlocks, indexBlocks } = require("./doc");
 const { blocksToMd, htmlPage, inventoryCsv } = require("./render");
 const { slugify } = require("./util");
 const { summarize } = require("./llm");
-const { scanText } = require("./secrets");
+const { scanPack: gateScan } = require("./gate");
 const { MERMAID_URL, MERMAID_SRI } = require("./render");
 
 function unwrap(j) {
@@ -84,13 +84,14 @@ async function generate(workflows, opts = {}) {
       showHosts: !!opts.showHosts,
       baseUrl: opts.baseUrl,
       showWebhookPaths: !!opts.showWebhookPaths,
+      includeNotes: !!opts.includeNotes,
       redactContacts: !!opts.redactContacts,
       keepContacts: !!opts.keepContacts,
     });
     return { m, slug: slugify(m.name, taken) };
   });
   const slugByName = new Map(items.map(({ m, slug }) => [m.name, slug]));
-  const date = opts.date || new Date().toISOString().slice(0, 10);
+  const date = opts.date || localStamp();
   const title = opts.title || "n8n handover pack";
 
   const files = {};
@@ -140,12 +141,14 @@ async function generate(workflows, opts = {}) {
 
 /** Final gate: run the secret detector over every rendered file. Returns [{file,line,kind}] (no values). */
 function scanPack(files) {
-  const out = [];
-  for (const [file, content] of Object.entries(files)) {
-    const text = file.endsWith(".html") ? content.split(MERMAID_URL).join("").split(MERMAID_SRI).join("") : content;
-    for (const h of scanText(text)) out.push({ file, line: h.line, kind: h.kind });
-  }
-  return out;
+  return gateScan(files, { mermaidUrl: MERMAID_URL, mermaidSri: MERMAID_SRI });
+}
+
+/** Local date and time zone, e.g. 2026-10-25 02:07 (Asia/Makassar). */
+function localStamp(d = new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())} (${tz})`;
 }
 
 function writeFiles(outDir, files) {
@@ -158,4 +161,5 @@ function writeFiles(outDir, files) {
 }
 
 module.exports = {
+  localStamp,
   scanPack, generate, loadDir, writeFiles, unwrap, forbiddenStrings };

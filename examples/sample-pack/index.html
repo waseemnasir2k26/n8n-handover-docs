@@ -17,7 +17,8 @@ section.wf{margin-top:48px}button{font:inherit;padding:6px 12px;border:1px solid
 <body><main>
 <p><button onclick="window.print()">Print / save as PDF</button></p>
 <h1>Demo Client</h1>
-<p>Generated 2026-10-25. 4 workflow(s). No credential values or IDs are included anywhere in this pack.</p>
+<p>Generated 2026-10-25. 4 workflow(s). Credential values and IDs are never copied into this pack.</p>
+<p class="note info"><strong>Note:</strong> 1 sticky note(s) hidden (use --include-notes to include them; they are then redacted best-effort). 3 name(s) were partly replaced with [redacted] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it.</p>
 <h2>Workflows</h2>
 <div class="tw"><table><thead><tr><th>Workflow</th><th>Active</th><th>Trigger</th><th>Services</th><th>Credentials</th><th>Error workflow</th><th>Warnings</th></tr></thead><tbody><tr><td><a href="#wf-lead-alerts-daily">Lead alerts (daily)</a></td><td>yes</td><td>schedule</td><td>HTTP API (custom endpoint), Gmail, Google Sheets</td><td>3</td><td>yes</td><td>0</td></tr><tr><td><a href="#wf-support-chat-agent">Support chat agent</a></td><td>yes</td><td>webhook</td><td>OpenAI, Stripe</td><td>2</td><td>no</td><td>4</td></tr><tr><td><a href="#wf-escalation-to-slack">Escalation to Slack</a></td><td>yes</td><td>subworkflow</td><td>Slack, SMTP email</td><td>2</td><td>no</td><td>0</td></tr><tr><td><a href="#wf-error-alert">Error alert</a></td><td>yes</td><td>error</td><td>Telegram</td><td>1</td><td>is one</td><td>0</td></tr></tbody></table></div>
 <h2>Credentials to transfer or recreate (names and types only)</h2>
@@ -62,8 +63,6 @@ section.wf{margin-top:48px}button{font:inherit;padding:6px 12px;border:1px solid
   class n0 trig;</pre></details>
 <h3>Steps</h3>
 <ol><li>Every morning: Schedule trigger. Next: Fetch new leads</li><li>Fetch new leads: HTTP Request, GET a custom endpoint (host hidden). Next: Is it a hot lead?</li><li>Is it a hot lead?: IF, checks 1 condition(s). Next: Email the owner (true), Add to nurture sheet (false)</li><li>Email the owner: Gmail, message / send</li><li>Add to nurture sheet: Google Sheets, sheet / append</li></ol>
-<h3>Notes left on the canvas</h3>
-<ul><li>Runs once a day. If the CRM is down the Fetch step retries 3 times.</li></ul>
 <h3>External services</h3>
 <div class="tw"><table><thead><tr><th>Service</th><th>Used by node(s)</th><th>Credential(s) (name / type)</th></tr></thead><tbody><tr><td>HTTP API (custom endpoint)</td><td>Fetch new leads</td><td>CRM API key / httpHeaderAuth</td></tr><tr><td>Gmail</td><td>Email the owner</td><td>Owner Gmail / gmailOAuth2</td></tr><tr><td>Google Sheets</td><td>Add to nurture sheet</td><td>Sheets (agency) / googleSheetsOAuth2Api</td></tr></tbody></table></div>
 <h3>Credentials (names and types only, never values)</h3>

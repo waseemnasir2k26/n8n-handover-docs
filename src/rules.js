@@ -528,6 +528,7 @@ function classify(type, credTypes = []) {
     return {
       service: titleFromCamel(credTypes[0]) || titleFromCamel(shortType(type)),
       cat: /oauth/i.test(credTypes[0]) ? "oauth" : "apikey",
+      derived: true,
     };
   }
   return null;

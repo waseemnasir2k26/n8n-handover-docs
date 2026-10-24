@@ -39,10 +39,6 @@ flowchart TD
 4. Email the owner: Gmail, message / send
 5. Add to nurture sheet: Google Sheets, sheet / append
 
-### Notes left on the canvas
-
-- Runs once a day. If the CRM is down the Fetch step retries 3 times.
-
 ### External services
 
 | Service | Used by node(s) | Credential(s) (name / type) |

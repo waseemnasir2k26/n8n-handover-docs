@@ -3,6 +3,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { parseArgs } = require("node:util");
 const { generate, loadDir, writeFiles } = require("./generate");
+const { runGitleaks } = require("./gate");
 const { fetchWorkflows, normaliseBase, scrubKey } = require("./api");
 
 const HELP = `n8n-handover-docs: generate a client handover pack from n8n workflows
@@ -26,6 +27,8 @@ Output:
   --show-webhook-paths  print full webhook paths (default: first 4 characters, they act as bearer tokens)
   --redact-contacts     also hide e-mails and phone numbers in names, tags and credential names (sticky notes always, see --keep-contacts)
   --keep-contacts       do not hide e-mails and phone numbers in sticky notes
+  --include-notes       include sticky-note text (hidden by default; redacted best-effort)
+  --no-gitleaks         skip the gitleaks pass of the final scan (it runs automatically when gitleaks is on PATH)
   --allow-findings      write the pack even if the final secret scan finds something (exit code 3 otherwise)
   --diagram-fallback    show diagrams as text only, with the reason, no script
   --offline             no CDN script in index.html; Mermaid diagrams stay as text
@@ -56,6 +59,8 @@ async function main(argv, env = process.env, io = {}) {
         "keep-contacts": { type: "boolean" },
         "allow-findings": { type: "boolean" },
         "diagram-fallback": { type: "boolean" },
+        "include-notes": { type: "boolean" },
+        "no-gitleaks": { type: "boolean" },
         offline: { type: "boolean" },
         llm: { type: "boolean" },
         date: { type: "string" },
@@ -134,6 +139,7 @@ async function main(argv, env = process.env, io = {}) {
       redactContacts: !!args["redact-contacts"],
       keepContacts: !!args["keep-contacts"],
       diagramFallback: !!args["diagram-fallback"],
+      includeNotes: !!args["include-notes"],
       baseUrl,
       offline: !!args.offline,
       llm: !!args.llm,
@@ -146,6 +152,12 @@ async function main(argv, env = process.env, io = {}) {
   } catch (e) {
     err(`error: could not build the pack: ${scrubKey(e && e.message, apiKey)}`);
     return 1;
+  }
+  let gitleaksRan = false;
+  if (!args["no-gitleaks"]) {
+    const g = runGitleaks(result.files);
+    gitleaksRan = g.ran;
+    result.findings.push(...g.findings);
   }
   if (result.findings.length) {
     err(`The final scan found ${result.findings.length} possible secret(s) in the generated pack (values not shown):`);
@@ -162,6 +174,11 @@ async function main(argv, env = process.env, io = {}) {
   const nWarn = result.items.reduce((n, { m }) => n + m.warnings.length, 0);
   out(
     `Wrote ${Object.keys(result.files).length} files for ${result.items.length} workflow(s) to ${outDir}`,
+  );
+  const hidden = result.items.reduce((n, { m }) => n + m.hiddenNotes, 0);
+  const redacted = result.items.reduce((n, { m }) => n + m.redactedNames, 0);
+  out(
+    `${hidden} sticky note(s) ${args["include-notes"] ? "included (best-effort redacted)" : "hidden (use --include-notes to include them)"}, ${redacted} name(s) partly redacted, final scan: built-in detector${gitleaksRan ? " + gitleaks" : " only (install gitleaks for a second opinion)"}, 0 findings.`,
   );
   out(
     `${nWarn} warning(s) to review before handover (see "Needs attention" in index.html).`,

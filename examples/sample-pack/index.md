@@ -1,6 +1,8 @@
 # Demo Client
 
-Generated 2026-10-25. 4 workflow(s). No credential values or IDs are included anywhere in this pack.
+Generated 2026-10-25. 4 workflow(s). Credential values and IDs are never copied into this pack.
+
+> **Note:** 1 sticky note(s) hidden (use --include-notes to include them; they are then redacted best-effort). 3 name(s) were partly replaced with \[redacted\] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it.
 
 ## Workflows
 

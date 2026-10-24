@@ -10,3 +10,6 @@
 - Final scan of every rendered file with the full secret detector (exit 3 and nothing written unless `--allow-findings`).
 - Free-text scrubbing for unquoted `key: value`, `key is value`, `Authorization: Token x`, and high-entropy tokens; webhook paths shortened unless `--show-webhook-paths`; e-mails and phone numbers hidden in sticky notes (`--redact-contacts`, `--keep-contacts`).
 - `npm run demo:canary`, `--diagram-fallback`, clear "Folder not found" message.
+- Rebuilt free-text handling as default-deny: sticky notes hidden unless `--include-notes`; names pass a normalising name policy; parameter text limited to fixed vocabularies.
+- Independent final gate (token classifier with base64/URL decoding, plus gitleaks when installed); exit 3 on any hit.
+- `npm run fuzz` adversarial corpus (800+ cases, 0 leaks with exit 0), `.gitattributes` eol=lf, local date and time zone in the pack header.

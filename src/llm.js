@@ -3,7 +3,7 @@
 // ever receives node names, node types and connections: no parameters, no
 // credentials, no pinned data, no URLs.
 const { structureForLLM } = require("./parse");
-const { scrubText } = require("./secrets");
+const { sanitizeText } = require("./policy");
 const { clean } = require("./util");
 
 function buildPrompt(model) {
@@ -39,7 +39,7 @@ async function post(url, headers, body, fetchImpl, key) {
 }
 
 function finish(text) {
-  const t = scrubText(clean(text)).replace(/\s+/g, " ").trim().slice(0, 1200);
+  const t = sanitizeText(text, { kind: "note", maxLen: 1200 });
   return t || null;
 }
 

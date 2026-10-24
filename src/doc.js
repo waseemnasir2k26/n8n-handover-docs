@@ -285,7 +285,15 @@ function indexBlocks(items, opts = {}) {
   b.push({ t: "h", l: 1, text: opts.title || "n8n handover pack" });
   b.push({
     t: "p",
-    text: `Generated ${opts.date}. ${items.length} workflow(s). No credential values or IDs are included anywhere in this pack.`,
+    text: `Generated ${opts.date}. ${items.length} workflow(s). Credential values and IDs are never copied into this pack.`,
+  });
+  const hidden = items.reduce((n, { m }) => n + m.hiddenNotes, 0);
+  const redacted = items.reduce((n, { m }) => n + m.redactedNames, 0);
+  const includeNotes = items.some(({ m }) => m.includeNotes);
+  b.push({
+    t: "note",
+    kind: "info",
+    text: `${hidden} sticky note(s) ${includeNotes ? "included, redacted best-effort" : "hidden (use --include-notes to include them; they are then redacted best-effort)"}. ${redacted} name(s) were partly replaced with [redacted] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it.`,
   });
   b.push({ t: "h", l: 2, text: "Workflows" });
   b.push({

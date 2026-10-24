@@ -58,37 +58,29 @@ Try it without any n8n: `npm run demo` (builds `examples/sample-pack` from `exam
 | `--show-webhook-paths`             | Show full webhook paths (default: first 4 characters, because a path works like a password)            |
 | `--redact-contacts`                | Also hide e-mails and phone numbers in workflow names, tags and credential names                       |
 | `--keep-contacts`                  | Do not hide e-mails and phone numbers in sticky notes (default: hidden)                                |
-| `--allow-findings`                 | Write the pack even if the final secret scan finds something (see below)                               |
+| `--include-notes` | Include sticky-note text (hidden by default; redacted best-effort) |
+| `--no-gitleaks` | Skip the gitleaks pass of the final gate (it runs automatically when gitleaks is on PATH) |
+| `--allow-findings` | Write the pack even if the final gate finds something (exit code 3 otherwise) |
 | `--diagram-fallback` / `--offline` | Diagrams as text with the reason shown, no script in the HTML                                          |
 | `--llm`                            | Add a plain-English AI summary per workflow (see below)                                                |
 | `--date YYYY-MM-DD`                | Date printed in the pack (reproducible output)                                                         |
 
 The HTML loads Mermaid 11.4.1 from jsDelivr with a pinned version and an SRI hash. If it cannot load, the diagram source stays visible as text.
 
-## What is scrubbed, what is checked, what is not
+## What is in the pack, and what is not (best-effort)
 
-**Never written:** credential values, credential IDs, your API key, parameter values, pinned test data contents. Credentials appear as name and type only.
+**The structure is the product; free text is not.** The pack describes how workflows are wired. It does not try to carry what people typed into them.
 
-**Scrubbed while building** (node names, workflow names, tags, credential names, sticky notes, webhook paths, AI summaries):
+- **Sticky notes are hidden by default.** The index says "N sticky note(s) hidden (use --include-notes to include them)". With `--include-notes` they are included after best-effort redaction.
+- **Never read at all:** credential values and IDs, parameter values, pinned test data, node `notes` and descriptions, Code node bodies. Hard-coded secrets in parameters are reported by node and field as `[masked, N chars]`, never copied.
+- **Names are shown** (workflow, node, tag, credential, sub-workflow) after a name policy: the text is normalised first (Unicode NFKC, zero-width characters, HTML entities, %-encoding, markdown wrappers, look-alike Cyrillic and Greek letters), then any name containing a credential word (pass, pw, secret, token, key, auth, cred, login, bearer, private), a long token mixing letters and digits, an entropy-heavy token, or a hex or base64 run is partly replaced with `[redacted]`. Over-redacting is intended: a credential called "CRM API key" survives, one called "key is correct horse battery" does not. The index says how many names were touched.
+- **Fixed vocabularies only** for everything else taken from parameters (HTTP methods, auth types, time units, numbers). Hostnames and URLs are hidden unless `--show-hosts`; webhook paths are shortened to 4 characters unless `--show-webhook-paths`; e-mails and phone numbers in notes are hidden (`--redact-contacts` extends that to names, `--keep-contacts` turns it off).
 
-- known key formats (OpenAI-style, GitHub, Slack, AWS, Google, Stripe, JWT, Bearer/Basic, private keys, credentials in URLs)
-- assignments in any form: `password: x`, `api_key=x`, `pw is x`, `secret - x`, quoted or unquoted, plus `Authorization: Token x`
-- long mixed-character tokens (20+ characters, upper and lower case, several digits) and 32+ character hex strings
-- URLs (hosts hidden unless `--show-hosts`), and e-mails and phone numbers in sticky notes
-- webhook paths, shortened to 4 characters unless `--show-webhook-paths`
+**Independent final gate.** After rendering, every output file is checked by a second detector that shares no code with the name policy. It classifies each token by character classes, length and entropy (also after base64 and URL decoding) and looks for credential words followed by a value. If `gitleaks` is on your PATH (recommended: https://github.com/gitleaks/gitleaks), it also runs `gitleaks detect --no-git` over the finished pack. Any hit means **exit code 3, nothing written**, with `file:line` and the kind of finding, never the value. `--allow-findings` writes the pack anyway; `--no-gitleaks` skips that pass.
 
-**Hard-coded secrets in node parameters** (headers, Code nodes, JSON bodies, YAML/.env-style lines) are not copied at all. They are listed by node and field as `[masked, N chars]`.
+**What this does not promise.** It is best-effort. A plain word used as a password with nothing around it, a secret split across fields, personal data that is not an e-mail or phone number, or something typed into a name in a way nobody has thought of yet can still get through. Names and credential names are copied as written after the policy. Read the pack before it leaves your hands.
 
-**Checked after rendering:** the finished text of every output file (`index.html`, `index.md`, each workflow `.md`, `inventory.csv`) is scanned with the full secret detector, and every credential ID, workflow ID and API key found in the input is searched for. Any ID or key hit is stripped. Any secret-pattern hit stops the run: **exit code 3, nothing written**, with `file:line` and the kind of finding (never the value). `--allow-findings` writes the pack anyway.
-
-**Not guaranteed:**
-
-- Plain words used as passwords with no marker in front of them, short secrets without a keyword, and anything in a language or format the patterns do not know.
-- Personal data that is not an e-mail or phone number (names, addresses, customer details typed into a node name or note).
-- Node names, credential names, workflow names and note text are copied as written after scrubbing. They can still say things you would not send to a third party.
-- Pinned data is reported as present, never read out, but check the source export before sharing it.
-
-A person should read the pack before it leaves your hands. See it work: `npm run demo:canary` plants nine fake secrets in a hostile workflow, shows none survive into the pack, then pastes secrets into the finished files and shows the final scan catching them with file and line.
+**How it is tested.** `npm run fuzz` plants about 800 hostile cases (look-alike letters, zero-width characters, full-width forms, markdown, table and entity wrappers, a line break between the key and the value, "the password for X is Y", "login: user / pass", URL-encoded and base64 keys, split keys) in 27 places a workflow can carry text, and counts leaks that reach the output with exit code 0. `npm run demo:canary` shows the gate catching secrets pasted into the finished files.
 
 ## Live mode safety
 
@@ -108,9 +100,9 @@ Generated from node types by a fixed rule table in [src/rules.js](src/rules.js) 
 - Plain-English text is rule-based. Expect "Edit Fields (Set), sets 3 field(s)", not business meaning. Sticky notes are copied in, so write good ones.
 - Unknown or community nodes get a generic entry: the service name is guessed from the credential type.
 - Cron reading covers common shapes; unusual expressions are shown raw.
-- Secret detection is pattern-based. It will miss some secrets and may flag or redact a few harmless strings (a long mixed-case identifier in a node name, for example).
+- Detection is heuristic. It will miss some secrets and will redact some harmless names (anything with "key", "token" or "auth" next to unfamiliar words, a long mixed-case identifier).
 - Very large workflows produce large diagrams; Mermaid limits are raised but readability drops past roughly 100 nodes.
-- Tested against synthetic fixtures covering n8n 1.x and 2.x workflow shapes. One dated live check: 2026-10-25, a self-hosted n8n with 97 workflows (1,526 nodes), read-only; every diagram rendered in Chrome and the output was searched for credential IDs, workflow IDs, the API key and secret patterns with zero hits. n8n changes node schemas often; open an issue with a redacted export if something breaks.
+- Tested against synthetic fixtures covering n8n 1.x and 2.x workflow shapes. One dated live check: 2026-10-25, a self-hosted n8n with 97 workflows (1,526 nodes), read-only; every diagram rendered in Chrome and the output was searched for credential IDs, workflow IDs, the API key and secret patterns with zero hits, and the final gate (built-in detector plus gitleaks) reported no findings. n8n changes node schemas often; open an issue with a redacted export if something breaks.
 
 ## For you if
 
@@ -123,7 +115,8 @@ Generated from node types by a fixed rule table in [src/rules.js](src/rules.js) 
 ```bash
 npm test             # node --test, no dependencies
 npm run demo         # rebuild examples/sample-pack
-npm run demo:canary  # planted-secret demo of the scrubber and the final scan
+npm run demo:canary  # planted-secret demo of the name policy and the final gate
+npm run fuzz         # adversarial corpus: counts leaks that reach the output
 ```
 
 MIT licensed, no telemetry.

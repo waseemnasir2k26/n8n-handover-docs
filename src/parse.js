@@ -6,34 +6,54 @@ const {
   titleFromCamel,
   typeLabel,
 } = require("./rules");
-const { findSecrets, scrubText: scrubBase, redactContacts, collectEnvRefs } = require("./secrets");
+const { findSecrets, redactContacts, collectEnvRefs } = require("./secrets");
+const { sanitizeText, sanitizeIdent } = require("./policy");
 
-// Free text from a workflow (names, sticky notes, tags) may contain URLs, contact
-// details and secrets. Module state is set per analyzeWorkflow() call (synchronous).
+// Every user-written string goes through the NAME POLICY (src/policy.js).
+// Module state is set per analyzeWorkflow() call (the function is synchronous).
 let HIDE_URLS = true;
 let CONTACTS_ALL = false;
 let CONTACTS_NOTES = true;
+let COUNT = { names: 0 };
 function hideUrls(s) {
   return HIDE_URLS ? s.replace(/\bhttps?:\/\/[^\s)"'`<>\]]+/gi, "<url hidden>") : s;
 }
-// Free text: secrets, high-entropy tokens, URLs (and contacts with --redact-contacts)
+// Names (workflow, node, tag, credential, sub-workflow): normalise, then redact suspicious spans
 function scrubText(t) {
-  const s = hideUrls(scrubBase(t));
+  const s = hideUrls(sanitizeText(hideUrls(String(t == null ? "" : t)), { counters: COUNT }));
   return CONTACTS_ALL ? redactContacts(s) : s;
 }
-// Machine identifiers (node types, credential types): no entropy rule
+// Machine identifiers (node types, credential types, env var names): token rules only, no keyword rule
 function scrubId(t) {
-  return hideUrls(scrubBase(t, { entropy: false }));
+  return sanitizeIdent(t, { counters: COUNT });
 }
-// Sticky notes: free text, contacts hidden by default
+// Sticky notes (only with --include-notes): same policy, longer, contacts hidden by default
 function scrubNote(t) {
-  const s = scrubText(t);
+  const s = hideUrls(sanitizeText(hideUrls(String(t == null ? "" : t)), { kind: "note", maxLen: 600, counters: COUNT }));
   return CONTACTS_NOTES ? redactContacts(s) : s;
 }
-// Webhook paths act as bearer tokens: show only a short prefix unless asked
+// Numbers and single words from parameters: nothing else may reach the output
+const N = (v, d) => {
+  const x = typeof v === "number" ? v : /^\d{1,9}$/.test(String(v)) ? Number(v) : NaN;
+  return Number.isFinite(x) ? x : d;
+};
+const UNITS = new Set(["milliseconds", "seconds", "minutes", "hours", "days", "weeks", "months", "years", "second", "minute", "hour", "day", "week", "month", "year", "ms", "s", "m", "h", "d"]);
+const W = (v, d) => (typeof v === "string" && UNITS.has(v.toLowerCase()) ? v : d);
+// Fixed vocabularies only: nothing else from a parameter may reach the output
+const METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
+const pickMethod = (v, d) => { const m = String(v).toUpperCase(); return METHODS.has(m) ? m : d; };
+const pickFrom = (v, list, d) => (typeof v === "string" && list.includes(v) ? v : d);
 function word(v) {
-  return /^[A-Za-z0-9/,_ -]{1,30}$/.test(String(v)) ? String(v) : "custom";
+  return String(v);
 }
+// Parameter paths: keep plain field names, hide anything that could carry a value
+function safePath(path) {
+  return String(path)
+    .split(/([.[\]])/)
+    .map((seg) => (/^[.[\]]$/.test(seg) || /^\d{1,4}$/.test(seg) || seg === "" ? seg : /^[A-Za-z][A-Za-z0-9]{0,30}$/.test(seg) && !/\d.*\d.*\d/.test(seg) ? seg : "*"))
+    .join("");
+}
+// Webhook paths act as bearer tokens: show only a short prefix unless asked
 function maskPath(path, show) {
   if (show || path.startsWith("(") || path.length <= 8) return path;
   return path.slice(0, 4) + "\u2026";
@@ -73,7 +93,7 @@ const DAYS = [
 const isStr = (v) => typeof v === "string";
 const plain = (v) =>
   isStr(v) && !v.startsWith("=") && !/\{\{/.test(v) ? v : null;
-const pad = (n) => String(n == null ? 0 : n).padStart(2, "0");
+const pad = (n) => String(N(n, 0)).padStart(2, "0");
 const arr = (v) => (Array.isArray(v) ? v : []);
 const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
 
@@ -94,28 +114,28 @@ function describeSchedule(node, tz) {
       if (f === "cronExpression")
         parts.push(cronText(it.expression));
       else if (f === "seconds")
-        parts.push(`every ${it.secondsInterval || 1} second(s)`);
+        parts.push(`every ${N(it.secondsInterval, 1)} second(s)`);
       else if (f === "minutes")
-        parts.push(`every ${it.minutesInterval || 1} minute(s)`);
+        parts.push(`every ${N(it.minutesInterval, 1)} minute(s)`);
       else if (f === "hours")
         parts.push(
-          `every ${it.hoursInterval || 1} hour(s) at minute ${pad(it.triggerAtMinute)}`,
+          `every ${N(it.hoursInterval, 1)} hour(s) at minute ${pad(it.triggerAtMinute)}`,
         );
       else if (f === "days")
         parts.push(
-          `every ${it.daysInterval || 1} day(s) at ${pad(it.triggerAtHour)}:${pad(it.triggerAtMinute)}`,
+          `every ${N(it.daysInterval, 1)} day(s) at ${pad(it.triggerAtHour)}:${pad(it.triggerAtMinute)}`,
         );
       else if (f === "weeks") {
         const d =
           arr(it.triggerAtDay)
-            .map((x) => DAYS[x] || x)
+            .map((x) => DAYS[x] || "")
             .join(", ") || "selected days";
         parts.push(
-          `every ${it.weeksInterval || 1} week(s) on ${d} at ${pad(it.triggerAtHour)}:${pad(it.triggerAtMinute)}`,
+          `every ${N(it.weeksInterval, 1)} week(s) on ${d} at ${pad(it.triggerAtHour)}:${pad(it.triggerAtMinute)}`,
         );
       } else if (f === "months")
         parts.push(
-          `every ${it.monthsInterval || 1} month(s) on day ${it.triggerAtDayOfMonth || 1} at ${pad(it.triggerAtHour)}:${pad(it.triggerAtMinute)}`,
+          `every ${N(it.monthsInterval, 1)} month(s) on day ${N(it.triggerAtDayOfMonth, 1)} at ${pad(it.triggerAtHour)}:${pad(it.triggerAtMinute)}`,
         );
       else parts.push("custom interval");
     }
@@ -133,17 +153,17 @@ function describeSchedule(node, tz) {
         );
       else if (m === "everyMonth")
         parts.push(
-          `monthly on day ${it.dayOfMonth || 1} at ${pad(it.hour)}:${pad(it.minute)}`,
+          `monthly on day ${N(it.dayOfMonth, 1)} at ${pad(it.hour)}:${pad(it.minute)}`,
         );
       else if (m === "everyX")
-        parts.push(`every ${it.value || 1} ${it.unit || "unit"}`);
+        parts.push(`every ${N(it.value, 1)} ${W(it.unit, "unit")}`);
       else if (m === "custom")
         parts.push(
           cronText(it.cronExpression),
         );
     }
   } else if (short === "interval") {
-    parts.push(`every ${p.interval || 1} ${p.unit || "seconds"}`);
+    parts.push(`every ${N(p.interval, 1)} ${W(p.unit, "seconds")}`);
   }
   if (!parts.length) return null;
   return parts.join("; ") + (tz ? ` (timezone ${scrubText(tz)})` : "");
@@ -174,7 +194,7 @@ function nodeDetail(node, ctx) {
   const bits = [];
   if (short === "httpRequest" || short === "httpRequestTool") {
     bits.push(
-      `${(plain(p.method) || "GET").toUpperCase()} ${ctx.hostLabel(node)}`,
+      `${pickMethod(plain(p.method), "GET")} ${ctx.hostLabel(node)}`,
     );
   } else if (short === "code") {
     bits.push(
@@ -193,10 +213,10 @@ function nodeDetail(node, ctx) {
     );
   } else if (short === "wait") {
     bits.push(
-      `waits${p.amount ? ` ${p.amount} ${plain(p.unit) || ""}` : ""}`.trim(),
+      `waits${p.amount ? ` ${N(p.amount, 0)} ${W(plain(p.unit), "")}` : ""}`.trim(),
     );
   } else if (short === "splitInBatches") {
-    bits.push(`loops in batches of ${p.batchSize || "N"}`);
+    bits.push(`loops in batches of ${N(p.batchSize, "N")}`);
   } else {
     const r = plain(p.resource);
     const o = plain(p.operation);
@@ -230,12 +250,14 @@ function analyzeWorkflow(wf, ctx = {}) {
   ctx = {
     idToName: ctx.idToName || new Map(),
     showHosts: !!ctx.showHosts,
+    includeNotes: !!ctx.includeNotes,
     showWebhookPaths: !!ctx.showWebhookPaths,
     redactContacts: !!ctx.redactContacts,
     keepContacts: !!ctx.keepContacts,
     baseUrl: ctx.baseUrl || null,
   };
   HIDE_URLS = !ctx.showHosts;
+  COUNT = { names: 0 };
   CONTACTS_ALL = !!ctx.redactContacts;
   CONTACTS_NOTES = ctx.keepContacts ? false : true;
   const warnings = [];
@@ -243,14 +265,14 @@ function analyzeWorkflow(wf, ctx = {}) {
     (n) => n && typeof n === "object",
   );
   const settings = obj(wf && wf.settings);
-  const tz = plain(settings.timezone);
+  const tz = /^[A-Za-z_\/+-]{1,40}$/.test(plain(settings.timezone) || "") ? plain(settings.timezone) : null;
 
   ctx.hostLabel = (node) => {
     const h = hostOf(obj(node.parameters).url);
     const known = h && classifyHost(h);
     if (known) return known.service;
     if (!h) return "a dynamic URL";
-    return ctx.showHosts ? h : "a custom endpoint (host hidden)";
+    return ctx.showHosts ? scrubId(h) : "a custom endpoint (host hidden)";
   };
 
   const nodes = [];
@@ -266,7 +288,7 @@ function analyzeWorkflow(wf, ctx = {}) {
       rawName: isStr(n.name) ? n.name : name,
       type: scrubId(type),
       short: scrubId(short),
-      typeLabel: scrubId(typeLabel(short)),
+      typeLabel: typeLabel(scrubId(short)),
       typeVersion: n.typeVersion,
       disabled: n.disabled === true,
       kind: "node",
@@ -352,6 +374,7 @@ function analyzeWorkflow(wf, ctx = {}) {
   const errorOutputs = [];
   const triggers = [];
   const notes = [];
+  let hiddenNotes = 0;
   const codeNodes = [];
   const agents = [];
   let hasLoop = false;
@@ -391,8 +414,11 @@ function analyzeWorkflow(wf, ctx = {}) {
     }
 
     if (n.kind === "note") {
-      const txt = scrubNote(plain(p.content) || "");
-      if (txt) notes.push(trunc(txt, 400));
+      hiddenNotes++;
+      if (ctx.includeNotes) {
+        const txt = scrubNote(plain(p.content) || "");
+        if (txt) notes.push(trunc(txt, 600));
+      }
       continue;
     }
 
@@ -403,7 +429,7 @@ function analyzeWorkflow(wf, ctx = {}) {
     refs.secrets.forEach((x) => env.secrets.add(x));
     // secrets
     for (const f of findSecrets(n.name, p))
-      secrets.push({ ...f, path: scrubText(f.path) });
+      secrets.push({ ...f, path: safePath(f.path) });
 
     n.detail = nodeDetail(raw, ctx);
     if (n.disabled) continue;
@@ -413,6 +439,7 @@ function analyzeWorkflow(wf, ctx = {}) {
       raw.type,
       creds.map((c) => c.type),
     );
+    if (cls && cls.derived) cls = { ...cls, service: scrubText(cls.service) };
     if (n.short === "httpRequest" || n.short === "httpRequestTool") {
       const h = hostOf(p.url);
       const known = h && classifyHost(h);
@@ -421,7 +448,7 @@ function analyzeWorkflow(wf, ctx = {}) {
         cls = {
           service:
             ctx.showHosts && h
-              ? `HTTP API: ${h}`
+              ? `HTTP API: ${scrubId(h)}`
               : "HTTP API (custom endpoint)",
           cat: "http",
         };
@@ -438,11 +465,11 @@ function analyzeWorkflow(wf, ctx = {}) {
       if (b.batchSize || b.batchInterval) {
         hasHttpBatching = true;
         caps.push(
-          `"${n.name}": HTTP batching ${b.batchSize || "?"} per batch, ${b.batchInterval || 0} ms between batches`,
+          `"${n.name}": HTTP batching ${N(b.batchSize, "?")} per batch, ${N(b.batchInterval, 0)} ms between batches`,
         );
       }
       const to = obj(p.options).timeout;
-      if (to) caps.push(`"${n.name}": request timeout ${to} ms`);
+      if (to) caps.push(`"${n.name}": request timeout ${N(to, 0)} ms`);
     }
     if (cls) {
       addService(cls.service, cls.cat, n.name, creds);
@@ -500,14 +527,11 @@ function analyzeWorkflow(wf, ctx = {}) {
       const path = maskPath(scrubText(plain(p.path) || plain(p.formPath) || (raw.webhookId ? "(auto-generated path)" : "(dynamic path)")), ctx.showWebhookPaths);
       const method =
         n.short === "webhook"
-          ? String(
-              plain(p.httpMethod) ||
-                (Array.isArray(p.httpMethod) ? p.httpMethod.join("/") : "GET"),
-            ).toUpperCase()
+          ? (Array.isArray(p.httpMethod) ? p.httpMethod : [plain(p.httpMethod) || "GET"]).slice(0, 7).map((m) => pickMethod(m, "CUSTOM")).join("/")
           : n.short === "formTrigger"
             ? "GET/POST"
             : "POST";
-      const auth = plain(p.authentication) || "none";
+      const auth = pickFrom(plain(p.authentication) || "none", ["none", "basicAuth", "headerAuth", "jwtAuth", "n8nUserAuth", "n8nAuth", "queryAuth"], "custom");
       const base =
         ctx.showHosts && ctx.baseUrl ? ctx.baseUrl : "https://<your-n8n-host>";
       const seg =
@@ -522,7 +546,7 @@ function analyzeWorkflow(wf, ctx = {}) {
         method: word(method),
         auth: word(auth),
         url: `${base}/${seg}/${path === "(auto-generated path)" ? "<id>" : path.replace(/^\//, "")}`,
-        responseMode: word(plain(p.responseMode) || "onReceived"),
+        responseMode: pickFrom(plain(p.responseMode) || "onReceived", ["onReceived", "lastNode", "responseNode", "streaming", "formSubmitted"], "custom"),
       });
       if (auth === "none" && n.short === "webhook")
         warnings.push(
@@ -545,24 +569,24 @@ function analyzeWorkflow(wf, ctx = {}) {
     if (n.short === "splitInBatches") {
       hasLoop = true;
       caps.push(
-        `"${n.name}": processes items in batches of ${p.batchSize || "default size"}`,
+        `"${n.name}": processes items in batches of ${N(p.batchSize, "default size")}`,
       );
     }
     if (n.short === "wait") {
       hasWait = true;
       if (p.amount)
         caps.push(
-          `"${n.name}": waits ${p.amount} ${plain(p.unit) || ""}`.trim(),
+          `"${n.name}": waits ${N(p.amount, 0)} ${W(plain(p.unit), "")}`.trim(),
         );
     }
     if (n.short === "limit")
-      caps.push(`"${n.name}": keeps at most ${p.maxItems || 1} item(s)`);
+      caps.push(`"${n.name}": keeps at most ${N(p.maxItems, 1)} item(s)`);
     if (n.short === "agent") {
       const mi = obj(p.options).maxIterations;
-      caps.push(`"${n.name}": AI agent iteration cap ${mi || "default (10)"}`);
+      caps.push(`"${n.name}": AI agent iteration cap ${N(mi, "default (10)")}`);
     }
     if (typeof p.limit === "number" && n.short !== "limit")
-      caps.push(`"${n.name}": result limit ${p.limit}`);
+      caps.push(`"${n.name}": result limit ${N(p.limit, 0)}`);
     if (p.returnAll === true)
       caps.push(`"${n.name}": returns ALL results (no cap)`);
     if (n.short === "code") codeNodes.push(n.name);
@@ -570,7 +594,7 @@ function analyzeWorkflow(wf, ctx = {}) {
     // per-node error handling
     if (raw.retryOnFail === true)
       retry.push(
-        `${n.name} (max ${raw.maxTries || 3} tries${raw.waitBetweenTries ? `, ${raw.waitBetweenTries} ms apart` : ""})`,
+        `${n.name} (max ${N(raw.maxTries, 3)} tries${raw.waitBetweenTries ? `, ${N(raw.waitBetweenTries, 0)} ms apart` : ""})`,
       );
     if (raw.continueOnFail === true || raw.onError === "continueRegularOutput")
       continueOnFail.push(n.name);
@@ -588,7 +612,7 @@ function analyzeWorkflow(wf, ctx = {}) {
       );
   }
   if (Number(settings.executionTimeout) > 0)
-    caps.push(`Workflow execution timeout: ${settings.executionTimeout} s`);
+    caps.push(`Workflow execution timeout: ${N(settings.executionTimeout, 0)} s`);
 
   // ---- steps (BFS from triggers over main edges), sub-nodes grouped under parent
   const mainOut = new Map();
@@ -733,7 +757,11 @@ function analyzeWorkflow(wf, ctx = {}) {
     warnings,
     disabledCount,
   };
+  model.env = { env: model.env.env.map(scrubId), vars: model.env.vars.map(scrubId), secrets: model.env.secrets.map(scrubId) };
+  model.hiddenNotes = hiddenNotes;
+  model.includeNotes = !!ctx.includeNotes;
   model.summary = plainSummary(model);
+  model.redactedNames = COUNT.names;
   return model;
 }
 

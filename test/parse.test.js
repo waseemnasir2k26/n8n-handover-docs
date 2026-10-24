@@ -42,7 +42,9 @@ test("Schedule -> HTTP -> IF -> Gmail: connections, branch labels, schedule text
   );
   assert.match(m.errorHandling.retry[0], /Fetch new leads \(max 3 tries/);
   assert.ok(m.caps.some((c) => /timeout 15000/.test(c)));
-  assert.equal(m.notes.length, 1);
+  assert.equal(m.notes.length, 0, "sticky notes are hidden by default");
+  assert.equal(m.hiddenNotes, 1);
+  assert.equal(analyzeWorkflow(example("01-lead-alerts.json"), { includeNotes: true }).notes.length, 1);
 });
 
 test("error workflow name is resolved when the set contains it", () => {

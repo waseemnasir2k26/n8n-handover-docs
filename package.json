@@ -23,6 +23,7 @@
   "scripts": {
     "test": "node --test",
     "demo:canary": "node scripts/canary.js",
+    "fuzz": "node scripts/fuzz.js",
     "demo": "node bin/n8n-handover-docs.js --from-dir examples/workflows --out examples/sample-pack --title \"Demo Client\" --date 2026-10-25"
   },
   "keywords": [

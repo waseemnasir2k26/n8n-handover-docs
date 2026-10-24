@@ -311,14 +311,4 @@ function collectEnvRefs(parameters) {
   return { env: [...env], vars: [...vars], secrets: [...secrets] };
 }
 
-module.exports = {
-  findSecrets,
-  scrubText,
-  scanText,
-  redactContacts,
-  collectEnvRefs,
-  maskDesc,
-  VALUE_PATTERNS,
-  stats,
-  tokenLike,
-};
+module.exports = { findSecrets, redactContacts, collectEnvRefs, maskDesc, VALUE_PATTERNS };
