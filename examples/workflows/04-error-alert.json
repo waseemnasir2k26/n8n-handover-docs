@@ -1,0 +1,36 @@
+{
+  "id": "wf-demo-0004-error-alert",
+  "name": "Error alert",
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "d1",
+      "name": "On any failure",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "id": "d2",
+      "name": "Tell the team",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [220, 0],
+      "retryOnFail": true,
+      "parameters": {
+        "chatId": "={{ $env.ALERT_CHAT_ID }}",
+        "text": "=Workflow {{ $json.workflow.name }} failed at {{ $json.execution.lastNodeExecuted }}"
+      },
+      "credentials": {
+        "telegramApi": { "id": "cred-SYNTH-c8c80123", "name": "Alert bot" }
+      }
+    }
+  ],
+  "connections": {
+    "On any failure": {
+      "main": [[{ "node": "Tell the team", "type": "main", "index": 0 }]]
+    }
+  }
+}

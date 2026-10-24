@@ -1,0 +1,126 @@
+{
+  "id": "wf-demo-0001-lead-alerts",
+  "name": "Lead alerts (daily)",
+  "active": true,
+  "tags": [{ "id": "t1", "name": "client-demo" }],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Makassar",
+    "errorWorkflow": "wf-demo-0004-error-alert"
+  },
+  "nodes": [
+    {
+      "id": "a1",
+      "name": "Every morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "days", "daysInterval": 1, "triggerAtHour": 8 }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a2",
+      "name": "Fetch new leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "parameters": {
+        "method": "GET",
+        "url": "https://crm.example-client.test/api/leads?status=new",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Tenant", "value": "={{ $env.CRM_TENANT }}" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "credentials": {
+        "httpHeaderAuth": { "id": "cred-SYNTH-7f3a91c2", "name": "CRM API key" }
+      }
+    },
+    {
+      "id": "a3",
+      "name": "Is it a hot lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.score }}",
+              "rightValue": 70,
+              "operator": { "type": "number", "operation": "gte" }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a4",
+      "name": "Email the owner",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [680, -100],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "owner@example-client.test",
+        "subject": "Hot lead"
+      },
+      "credentials": {
+        "gmailOAuth2": { "id": "cred-SYNTH-0b11d4e8", "name": "Owner Gmail" }
+      }
+    },
+    {
+      "id": "a5",
+      "name": "Add to nurture sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [680, 100],
+      "parameters": { "resource": "sheet", "operation": "append" },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cred-SYNTH-55aa21f0",
+          "name": "Sheets (agency)"
+        }
+      }
+    },
+    {
+      "id": "a6",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, -200],
+      "parameters": {
+        "content": "Runs once a day. If the CRM is down the Fetch step retries 3 times."
+      }
+    }
+  ],
+  "connections": {
+    "Every morning": {
+      "main": [[{ "node": "Fetch new leads", "type": "main", "index": 0 }]]
+    },
+    "Fetch new leads": {
+      "main": [[{ "node": "Is it a hot lead?", "type": "main", "index": 0 }]]
+    },
+    "Is it a hot lead?": {
+      "main": [
+        [{ "node": "Email the owner", "type": "main", "index": 0 }],
+        [{ "node": "Add to nurture sheet", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

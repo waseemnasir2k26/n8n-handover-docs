@@ -1,0 +1,129 @@
+{
+  "id": "wf-demo-0002-support-agent",
+  "name": "Support chat agent",
+  "active": true,
+  "tags": [{ "id": "t1", "name": "client-demo" }],
+  "settings": { "executionOrder": "v1" },
+  "pinData": {
+    "Chat webhook": [{ "json": { "message": "example customer text" } }]
+  },
+  "nodes": [
+    {
+      "id": "b1",
+      "name": "Chat webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "11111111-2222-3333-4444-555555555555",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support-chat",
+        "responseMode": "lastNode",
+        "authentication": "none"
+      }
+    },
+    {
+      "id": "b2",
+      "name": "Support agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [240, 0],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.message }}",
+        "options": {
+          "maxIterations": 6,
+          "systemMessage": "You are a polite support assistant."
+        }
+      }
+    },
+    {
+      "id": "b3",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [140, 220],
+      "parameters": {
+        "model": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" }
+      },
+      "credentials": {
+        "openAiApi": { "id": "cred-SYNTH-9c4e7710", "name": "OpenAI (client)" }
+      }
+    },
+    {
+      "id": "b4",
+      "name": "Window memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [260, 220],
+      "parameters": { "contextWindowLength": 8 }
+    },
+    {
+      "id": "b5",
+      "name": "Look up order",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [380, 220],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.stripe.com/v1/charges",
+        "toolDescription": "Find a customer order"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-SYNTH-31d0aa42",
+          "name": "Stripe read-only"
+        }
+      }
+    },
+    {
+      "id": "b6",
+      "name": "Escalate to human",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [500, 220],
+      "parameters": {
+        "name": "escalate",
+        "description": "Hand over to a person",
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-demo-0003-escalation",
+          "mode": "list",
+          "cachedResultName": "Escalation to Slack"
+        }
+      }
+    },
+    {
+      "id": "b7",
+      "name": "Check Slack token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0],
+      "disabled": true,
+      "parameters": {
+        "jsCode": "const apiKey = 'DEMO-NOT-A-REAL-KEY-0000';\nreturn items;"
+      }
+    }
+  ],
+  "connections": {
+    "Chat webhook": {
+      "main": [[{ "node": "Support agent", "type": "main", "index": 0 }]]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [{ "node": "Support agent", "type": "ai_languageModel", "index": 0 }]
+      ]
+    },
+    "Window memory": {
+      "ai_memory": [
+        [{ "node": "Support agent", "type": "ai_memory", "index": 0 }]
+      ]
+    },
+    "Look up order": {
+      "ai_tool": [[{ "node": "Support agent", "type": "ai_tool", "index": 0 }]]
+    },
+    "Escalate to human": {
+      "ai_tool": [[{ "node": "Support agent", "type": "ai_tool", "index": 0 }]]
+    }
+  }
+}

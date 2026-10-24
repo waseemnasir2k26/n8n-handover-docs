@@ -1,0 +1,5 @@
+.env
+.env.*
+handover/
+node_modules/
+*.log

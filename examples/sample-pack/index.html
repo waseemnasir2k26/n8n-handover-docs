@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src https://cdn.jsdelivr.net 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex">
+<title>Demo Client</title><style>
+:root{--bg:#fff;--fg:#1b1f24;--mut:#59636e;--line:#d0d7de;--acc:#0b5fff;--warn:#fff4ce;--info:#e7f0ff}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1419;--fg:#e6e9ee;--mut:#9aa4b2;--line:#2b3440;--acc:#7aa8ff;--warn:#3a3112;--info:#13233f}}
+*{box-sizing:border-box}body{margin:0;padding:24px 16px;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1040px;margin:0 auto}h1{font-size:28px}h2{font-size:22px;margin-top:36px;border-bottom:1px solid var(--line);padding-bottom:6px}h3{font-size:16px;margin-top:22px}
+a{color:var(--acc)}.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:8px 0;font-size:13.5px}th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}th{background:rgba(127,127,127,.12)}
+.note{padding:8px 12px;border-radius:6px;border:1px solid var(--line)}.warn{background:var(--warn)}.info{background:var(--info)}
+pre{overflow:auto;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:12.5px}.diagram{overflow:auto;border:1px solid var(--line);border-radius:6px;padding:8px;margin:8px 0}.diagram pre.mermaid{border:0;background:none}
+section.wf{margin-top:48px}button{font:inherit;padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--fg);cursor:pointer}
+@media print{body{font-size:11px;padding:0}button,.srcbox,nav{display:none!important}section.wf{page-break-before:always}table,.diagram,.note{page-break-inside:avoid}.tw{overflow:visible}a{color:inherit;text-decoration:none}pre.mermaid{white-space:pre-wrap}details{display:block}}
+@page{margin:14mm}
+</style></head>
+<body><main>
+<p><button onclick="window.print()">Print / save as PDF</button></p>
+<h1>Demo Client</h1>
+<p>Generated 2026-10-25. 4 workflow(s). No credential values or IDs are included anywhere in this pack.</p>
+<h2>Workflows</h2>
+<div class="tw"><table><thead><tr><th>Workflow</th><th>Active</th><th>Trigger</th><th>Services</th><th>Credentials</th><th>Error workflow</th><th>Warnings</th></tr></thead><tbody><tr><td><a href="#wf-lead-alerts-daily">Lead alerts (daily)</a></td><td>yes</td><td>schedule</td><td>HTTP API (custom endpoint), Gmail, Google Sheets</td><td>3</td><td>yes</td><td>0</td></tr><tr><td><a href="#wf-support-chat-agent">Support chat agent</a></td><td>yes</td><td>webhook</td><td>OpenAI, Stripe</td><td>2</td><td>no</td><td>4</td></tr><tr><td><a href="#wf-escalation-to-slack">Escalation to Slack</a></td><td>yes</td><td>subworkflow</td><td>Slack, SMTP email</td><td>2</td><td>no</td><td>0</td></tr><tr><td><a href="#wf-error-alert">Error alert</a></td><td>yes</td><td>error</td><td>Telegram</td><td>1</td><td>is one</td><td>0</td></tr></tbody></table></div>
+<h2>Credentials to transfer or recreate (names and types only)</h2>
+<div class="tw"><table><thead><tr><th>Name</th><th>Type</th><th>Used in workflow(s)</th></tr></thead><tbody><tr><td>CRM API key</td><td>httpHeaderAuth</td><td>Lead alerts (daily)</td></tr><tr><td>Owner Gmail</td><td>gmailOAuth2</td><td>Lead alerts (daily)</td></tr><tr><td>Sheets (agency)</td><td>googleSheetsOAuth2Api</td><td>Lead alerts (daily)</td></tr><tr><td>OpenAI (client)</td><td>openAiApi</td><td>Support chat agent</td></tr><tr><td>Stripe read-only</td><td>httpHeaderAuth</td><td>Support chat agent</td></tr><tr><td>Slack bot</td><td>slackApi</td><td>Escalation to Slack</td></tr><tr><td>SMTP relay</td><td>smtp</td><td>Escalation to Slack</td></tr><tr><td>Alert bot</td><td>telegramApi</td><td>Error alert</td></tr></tbody></table></div>
+<h2>Environment variables and n8n variables to set</h2>
+<div class="tw"><table><thead><tr><th>Name</th><th>Used in workflow(s)</th></tr></thead><tbody><tr><td>$env.CRM_TENANT</td><td>Lead alerts (daily)</td></tr><tr><td>$env.ALERT_CHAT_ID</td><td>Error alert</td></tr></tbody></table></div>
+<h2>Workflow-to-workflow calls</h2>
+<div class="tw"><table><thead><tr><th>Caller</th><th>Node</th><th>Calls</th></tr></thead><tbody><tr><td>Support chat agent</td><td>Escalate to human</td><td>Escalation to Slack</td></tr></tbody></table></div>
+<h2>Needs attention before handover</h2>
+<ul><li>Support chat agent: Webhook &quot;Chat webhook&quot; has no authentication: anyone who knows the URL can trigger it.</li><li>Support chat agent: Pinned (frozen) test data exists on 1 node(s): Chat webhook. Pinned data replaces live output during manual test runs and can contain real customer data. Unpin before sharing the export.</li><li>Support chat agent: 1 possible hard-coded secret(s) found inside node parameters (listed by location, values masked). Move them to credentials or environment variables.</li><li>Support chat agent: 1 disabled node(s) are part of this workflow and are excluded from the service list.</li></ul>
+<section class="wf" id="wf-lead-alerts-daily">
+<h2 id="wf-lead-alerts-daily">Lead alerts (daily)</h2>
+<p>This workflow runs on a schedule: every 1 day(s) at 08:00 (timezone Asia/Makassar). Along the way it uses HTTP API (custom endpoint), Gmail and Google Sheets. It makes decisions at &quot;Is it a hot lead?&quot;. When it fails, an error workflow is notified.</p>
+<div class="tw"><table><thead><tr><th>Item</th><th>Value</th></tr></thead><tbody><tr><td>Active</td><td>yes</td></tr><tr><td>Nodes</td><td>5</td></tr><tr><td>Tags</td><td>client-demo</td></tr><tr><td>Trigger</td><td>Every morning (schedule)</td></tr><tr><td>Schedule</td><td>every 1 day(s) at 08:00 (timezone Asia/Makassar)</td></tr></tbody></table></div>
+<h3>Flow</h3>
+<div class="diagram"><pre class="mermaid">flowchart TD
+  n0([&quot;Every morning&lt;br/&gt;Schedule trigger&quot;])
+  n1[&quot;Fetch new leads&lt;br/&gt;HTTP Request&quot;]
+  n2{&quot;Is it a hot lead?&lt;br/&gt;IF&quot;}
+  n3[&quot;Email the owner&lt;br/&gt;Gmail&quot;]
+  n4[&quot;Add to nurture sheet&lt;br/&gt;Google Sheets&quot;]
+  n0 --&gt; n1
+  n1 --&gt; n2
+  n2 --&gt;|&quot;true&quot;| n3
+  n2 --&gt;|&quot;false&quot;| n4
+  classDef trig fill:#e8f5e9,stroke:#2e7d32;
+  classDef sub fill:#f3e5f5,stroke:#6a1b9a;
+  classDef off fill:#eee,stroke:#999,color:#777,stroke-dasharray: 4 3;
+  class n0 trig;</pre></div><details class="srcbox"><summary>Diagram source (text fallback)</summary><pre class="src">flowchart TD
+  n0([&quot;Every morning&lt;br/&gt;Schedule trigger&quot;])
+  n1[&quot;Fetch new leads&lt;br/&gt;HTTP Request&quot;]
+  n2{&quot;Is it a hot lead?&lt;br/&gt;IF&quot;}
+  n3[&quot;Email the owner&lt;br/&gt;Gmail&quot;]
+  n4[&quot;Add to nurture sheet&lt;br/&gt;Google Sheets&quot;]
+  n0 --&gt; n1
+  n1 --&gt; n2
+  n2 --&gt;|&quot;true&quot;| n3
+  n2 --&gt;|&quot;false&quot;| n4
+  classDef trig fill:#e8f5e9,stroke:#2e7d32;
+  classDef sub fill:#f3e5f5,stroke:#6a1b9a;
+  classDef off fill:#eee,stroke:#999,color:#777,stroke-dasharray: 4 3;
+  class n0 trig;</pre></details>
+<h3>Steps</h3>
+<ol><li>Every morning: Schedule trigger. Next: Fetch new leads</li><li>Fetch new leads: HTTP Request, GET a custom endpoint (host hidden). Next: Is it a hot lead?</li><li>Is it a hot lead?: IF, checks 1 condition(s). Next: Email the owner (true), Add to nurture sheet (false)</li><li>Email the owner: Gmail, message / send</li><li>Add to nurture sheet: Google Sheets, sheet / append</li></ol>
+<h3>Notes left on the canvas</h3>
+<ul><li>Runs once a day. If the CRM is down the Fetch step retries 3 times.</li></ul>
+<h3>External services</h3>
+<div class="tw"><table><thead><tr><th>Service</th><th>Used by node(s)</th><th>Credential(s) (name / type)</th></tr></thead><tbody><tr><td>HTTP API (custom endpoint)</td><td>Fetch new leads</td><td>CRM API key / httpHeaderAuth</td></tr><tr><td>Gmail</td><td>Email the owner</td><td>Owner Gmail / gmailOAuth2</td></tr><tr><td>Google Sheets</td><td>Add to nurture sheet</td><td>Sheets (agency) / googleSheetsOAuth2Api</td></tr></tbody></table></div>
+<h3>Credentials (names and types only, never values)</h3>
+<div class="tw"><table><thead><tr><th>Name</th><th>Type</th><th>Node(s)</th></tr></thead><tbody><tr><td>CRM API key</td><td>httpHeaderAuth</td><td>Fetch new leads</td></tr><tr><td>Owner Gmail</td><td>gmailOAuth2</td><td>Email the owner</td></tr><tr><td>Sheets (agency)</td><td>googleSheetsOAuth2Api</td><td>Add to nurture sheet</td></tr></tbody></table></div>
+<h3>Environment variables and n8n variables referenced</h3>
+<ul><li>$env: CRM_TENANT</li></ul>
+<h3>Webhooks</h3>
+<p>None.</p>
+<h3>Error handling</h3>
+<ul><li>Error workflow: Error alert</li><li>Retry on fail: Fetch new leads (max 3 tries, 2000 ms apart)</li><li>Continue on fail: not used</li><li>Error output branch: not used</li></ul>
+<h3>Rate limits and caps</h3>
+<ul><li>&quot;Fetch new leads&quot;: request timeout 15000 ms</li></ul>
+<h3>Sub-workflows called</h3>
+<p>None.</p>
+<h3>Warnings</h3>
+<p>None.</p>
+<h3>When it breaks</h3>
+<div class="tw"><table><thead><tr><th>Area</th><th>Symptom</th><th>Likely cause</th><th>Where to look</th></tr></thead><tbody><tr><td>HTTP API (custom endpoint)</td><td>401 / 403</td><td>Token expired, key rotated, or header/auth settings changed</td><td>Node(s): Fetch new leads. Check the credential attached to the request node</td></tr><tr><td>HTTP API (custom endpoint)</td><td>429 / 5xx / timeout</td><td>Remote API is rate limiting or down</td><td>Node(s): Fetch new leads. Use retry-on-fail with wait; read Retry-After in the failed execution</td></tr><tr><td>HTTP API (custom endpoint)</td><td>Response shape changed</td><td>A field was renamed, so expressions downstream return undefined or empty</td><td>Node(s): Fetch new leads. Open the failed execution, compare the response with the field the next node reads</td></tr><tr><td>HTTP API (custom endpoint)</td><td>DNS / TLS error</td><td>Endpoint moved or its certificate expired</td><td>Node(s): Fetch new leads. Open the URL from the n8n server</td></tr><tr><td>Gmail</td><td>Auth expired or revoked</td><td>Refresh token expired or revoked: password change, access removed, or (Google Cloud app left in &quot;Testing&quot; mode) refresh tokens expire after 7 days</td><td>Node(s): Email the owner. Reconnect the credential, then re-run the failed execution</td></tr><tr><td>Gmail</td><td>429 / quota exceeded</td><td>Per-minute or daily Google API quota hit, often from a loop calling the node once per item</td><td>Node(s): Email the owner. Add batching or a Wait node; check the Google Cloud console quota page</td></tr><tr><td>Gmail</td><td>Schema change</td><td>Sheet column renamed or moved, folder or file deleted or unshared</td><td>Node(s): Email the owner. Open the target sheet/folder and compare against the column or ID the node expects</td></tr><tr><td>Google Sheets</td><td>Auth expired or revoked</td><td>Refresh token expired or revoked: password change, access removed, or (Google Cloud app left in &quot;Testing&quot; mode) refresh tokens expire after 7 days</td><td>Node(s): Add to nurture sheet. Reconnect the credential, then re-run the failed execution</td></tr><tr><td>Google Sheets</td><td>429 / quota exceeded</td><td>Per-minute or daily Google API quota hit, often from a loop calling the node once per item</td><td>Node(s): Add to nurture sheet. Add batching or a Wait node; check the Google Cloud console quota page</td></tr><tr><td>Google Sheets</td><td>Schema change</td><td>Sheet column renamed or moved, folder or file deleted or unshared</td><td>Node(s): Add to nurture sheet. Open the target sheet/folder and compare against the column or ID the node expects</td></tr><tr><td>Schedule trigger</td><td>Run did not fire</td><td>Workflow is inactive (it deactivates if saved with errors, or after import), n8n was down at the scheduled time (missed runs are not replayed), or the timezone differs from what you expect</td><td>Node(s): Every morning. Check the workflow Active toggle, the n8n timezone setting, and Executions around the expected time</td></tr></tbody></table></div>
+<p>First step for any failure: n8n &gt; Executions &gt; filter by this workflow &gt; open the red execution &gt; the failing node is highlighted and its error text is on the right.</p>
+</section>
+<section class="wf" id="wf-support-chat-agent">
+<h2 id="wf-support-chat-agent">Support chat agent</h2>
+<p>This workflow receives an HTTP request (webhook). Along the way it uses OpenAI and Stripe. &quot;Support agent&quot; is an AI step wired to model: OpenAI Chat Model; memory: Window memory; tool: Look up order, Escalate to human. It hands work to 1 other workflow(s). If it fails, nothing is notified automatically.</p>
+<div class="tw"><table><thead><tr><th>Item</th><th>Value</th></tr></thead><tbody><tr><td>Active</td><td>yes</td></tr><tr><td>Nodes</td><td>7</td></tr><tr><td>Tags</td><td>client-demo</td></tr><tr><td>Trigger</td><td>Chat webhook (webhook)</td></tr><tr><td>Schedule</td><td>not scheduled</td></tr></tbody></table></div>
+<h3>Flow</h3>
+<div class="diagram"><pre class="mermaid">flowchart TD
+  n0([&quot;Chat webhook&lt;br/&gt;Webhook&quot;])
+  n1[&quot;Support agent&lt;br/&gt;AI Agent&quot;]
+  n2(&quot;OpenAI Chat Model&lt;br/&gt;OpenAI chat model&quot;)
+  n3(&quot;Window memory&lt;br/&gt;Window buffer memory&quot;)
+  n4(&quot;Look up order&lt;br/&gt;HTTP Request tool&quot;)
+  n5(&quot;Escalate to human&lt;br/&gt;Call workflow #40;AI tool#41;&quot;)
+  n6[&quot;Check Slack token&lt;br/&gt;Code&quot;]
+  n0 --&gt; n1
+  n2 -.-&gt;|&quot;model&quot;| n1
+  n3 -.-&gt;|&quot;memory&quot;| n1
+  n4 -.-&gt;|&quot;tool&quot;| n1
+  n5 -.-&gt;|&quot;tool&quot;| n1
+  classDef trig fill:#e8f5e9,stroke:#2e7d32;
+  classDef sub fill:#f3e5f5,stroke:#6a1b9a;
+  classDef off fill:#eee,stroke:#999,color:#777,stroke-dasharray: 4 3;
+  class n0 trig;
+  class n2,n3,n4,n5 sub;
+  class n6 off;</pre></div><details class="srcbox"><summary>Diagram source (text fallback)</summary><pre class="src">flowchart TD
+  n0([&quot;Chat webhook&lt;br/&gt;Webhook&quot;])
+  n1[&quot;Support agent&lt;br/&gt;AI Agent&quot;]
+  n2(&quot;OpenAI Chat Model&lt;br/&gt;OpenAI chat model&quot;)
+  n3(&quot;Window memory&lt;br/&gt;Window buffer memory&quot;)
+  n4(&quot;Look up order&lt;br/&gt;HTTP Request tool&quot;)
+  n5(&quot;Escalate to human&lt;br/&gt;Call workflow #40;AI tool#41;&quot;)
+  n6[&quot;Check Slack token&lt;br/&gt;Code&quot;]
+  n0 --&gt; n1
+  n2 -.-&gt;|&quot;model&quot;| n1
+  n3 -.-&gt;|&quot;memory&quot;| n1
+  n4 -.-&gt;|&quot;tool&quot;| n1
+  n5 -.-&gt;|&quot;tool&quot;| n1
+  classDef trig fill:#e8f5e9,stroke:#2e7d32;
+  classDef sub fill:#f3e5f5,stroke:#6a1b9a;
+  classDef off fill:#eee,stroke:#999,color:#777,stroke-dasharray: 4 3;
+  class n0 trig;
+  class n2,n3,n4,n5 sub;
+  class n6 off;</pre></details>
+<h3>Steps</h3>
+<ol><li>Chat webhook: Webhook. Next: Support agent</li><li>Support agent: AI Agent. Uses model: OpenAI Chat Model; memory: Window memory; tool: Look up order, Escalate to human</li><li>Check Slack token: Code, runs custom JavaScript code [DISABLED]</li></ol>
+<h3>External services</h3>
+<div class="tw"><table><thead><tr><th>Service</th><th>Used by node(s)</th><th>Credential(s) (name / type)</th></tr></thead><tbody><tr><td>OpenAI</td><td>OpenAI Chat Model</td><td>OpenAI (client) / openAiApi</td></tr><tr><td>Stripe</td><td>Look up order</td><td>Stripe read-only / httpHeaderAuth</td></tr></tbody></table></div>
+<h3>Credentials (names and types only, never values)</h3>
+<div class="tw"><table><thead><tr><th>Name</th><th>Type</th><th>Node(s)</th></tr></thead><tbody><tr><td>OpenAI (client)</td><td>openAiApi</td><td>OpenAI Chat Model</td></tr><tr><td>Stripe read-only</td><td>httpHeaderAuth</td><td>Look up order</td></tr></tbody></table></div>
+<h3>Environment variables and n8n variables referenced</h3>
+<p>None.</p>
+<h3>Webhooks</h3>
+<div class="tw"><table><thead><tr><th>Node</th><th>Method</th><th>Path</th><th>URL</th><th>Auth</th><th>Responds</th></tr></thead><tbody><tr><td>Chat webhook</td><td>POST</td><td>support-chat</td><td>https://&lt;your-n8n-host&gt;/webhook/support-chat</td><td>none</td><td>lastNode</td></tr></tbody></table></div>
+<h3>Error handling</h3>
+<ul><li>Error workflow: not set</li><li>Retry on fail: not used</li><li>Continue on fail: not used</li><li>Error output branch: not used</li></ul>
+<p class="note warn"><strong>Warning:</strong> No error workflow is set: a failure is visible only in the n8n Executions list.</p>
+<p class="note warn"><strong>Warning:</strong> No node that calls an external service has retry-on-fail enabled.</p>
+<h3>Rate limits and caps</h3>
+<ul><li>&quot;Support agent&quot;: AI agent iteration cap 6</li></ul>
+<h3>Sub-workflows called</h3>
+<ul><li>Escalate to human (as an AI tool) calls <a href="#wf-escalation-to-slack">Escalation to Slack</a></li></ul>
+<h3>Warnings</h3>
+<ul><li>Webhook &quot;Chat webhook&quot; has no authentication: anyone who knows the URL can trigger it.</li><li>Pinned (frozen) test data exists on 1 node(s): Chat webhook. Pinned data replaces live output during manual test runs and can contain real customer data. Unpin before sharing the export.</li><li>1 possible hard-coded secret(s) found inside node parameters (listed by location, values masked). Move them to credentials or environment variables.</li><li>1 disabled node(s) are part of this workflow and are excluded from the service list.</li></ul>
+<div class="tw"><table><thead><tr><th>Node</th><th>Location</th><th>What it looks like</th><th>Value</th></tr></thead><tbody><tr><td>Check Slack token</td><td>jsCode</td><td>assignment to &quot;apiKey&quot;</td><td>[masked, 24 chars]</td></tr></tbody></table></div>
+<h3>When it breaks</h3>
+<div class="tw"><table><thead><tr><th>Area</th><th>Symptom</th><th>Likely cause</th><th>Where to look</th></tr></thead><tbody><tr><td>OpenAI</td><td>401 / 403 auth failure</td><td>API key rotated or billing/credit exhausted (often shown as 401 or 402)</td><td>Node(s): OpenAI Chat Model. Check key and billing in the provider console; replace credential</td></tr><tr><td>OpenAI</td><td>429 rate limit</td><td>Per-minute token or request limit, or free-tier daily cap</td><td>Node(s): OpenAI Chat Model. Add retry-on-fail with a wait, reduce parallel runs, or switch model</td></tr><tr><td>OpenAI</td><td>Model deprecated or renamed</td><td>Provider retired the model name configured in the node</td><td>Node(s): OpenAI Chat Model. Pick a current model in the node settings</td></tr><tr><td>OpenAI</td><td>Output no longer parses</td><td>Model replied in a different shape, so an output parser or the next node fails</td><td>Node(s): OpenAI Chat Model. Open the failed execution, read the raw model reply, tighten the prompt/schema</td></tr><tr><td>OpenAI</td><td>Context too long</td><td>Input grew past the model context window</td><td>Node(s): OpenAI Chat Model. Truncate or summarise input before the model node</td></tr><tr><td>Stripe</td><td>401 / 403 auth failure</td><td>API key rotated, revoked, or the plan/permissions changed</td><td>Node(s): Look up order. Replace the key in the credential; test the node</td></tr><tr><td>Stripe</td><td>429 / rate limited</td><td>Plan limit or per-minute limit reached</td><td>Node(s): Look up order. Check provider usage page; add Wait or batching</td></tr><tr><td>Stripe</td><td>Schema change</td><td>Field renamed, ID deleted, or API version retired</td><td>Node(s): Look up order. Open the failing node, run it with the last input, read the error body</td></tr><tr><td>Webhook trigger</td><td>Webhook not reached or returns 404</td><td>Workflow inactive, or the sender uses the test URL instead of the production URL, or the path changed</td><td>Node(s): Chat webhook. Check Active toggle and the exact path/method shown in this document</td></tr><tr><td>Webhook trigger</td><td>Anyone who knows the URL can trigger it</td><td>Webhook has no authentication configured</td><td>Node(s): Chat webhook. Add header or basic auth on the Webhook node, or validate a shared secret in the first node</td></tr><tr><td>Sub-workflows</td><td>Sub-workflow call fails</td><td>The called workflow is inactive, renamed, deleted, or expects different input fields. Its error shows as a failure of the caller</td><td>Node(s): Escalate to human. Open the called workflow and its latest execution; compare input fields</td></tr><tr><td>AI agent</td><td>AI agent loops, stalls or returns nonsense</td><td>Iteration cap reached, a tool errored, or the model passed bad arguments to a tool</td><td>Node(s): Support agent. Open the failed execution and read the agent step-by-step log; check each tool node separately</td></tr></tbody></table></div>
+<p>First step for any failure: n8n &gt; Executions &gt; filter by this workflow &gt; open the red execution &gt; the failing node is highlighted and its error text is on the right.</p>
+</section>
+<section class="wf" id="wf-escalation-to-slack">
+<h2 id="wf-escalation-to-slack">Escalation to Slack</h2>
+<p>This workflow is called by another workflow. Along the way it uses Slack and SMTP email. It makes decisions at &quot;Route by urgency&quot;. If it fails, nothing is notified automatically.</p>
+<div class="tw"><table><thead><tr><th>Item</th><th>Value</th></tr></thead><tbody><tr><td>Active</td><td>yes</td></tr><tr><td>Nodes</td><td>6</td></tr><tr><td>Tags</td><td>none</td></tr><tr><td>Trigger</td><td>Called by agent (subworkflow)</td></tr><tr><td>Schedule</td><td>not scheduled</td></tr></tbody></table></div>
+<h3>Flow</h3>
+<div class="diagram"><pre class="mermaid">flowchart TD
+  n0([&quot;Called by agent&lt;br/&gt;Execute Workflow trigger&quot;])
+  n1{&quot;Route by urgency&lt;br/&gt;Switch&quot;}
+  n2[&quot;Page on-call&lt;br/&gt;Slack&quot;]
+  n3[&quot;Queue for morning&lt;br/&gt;Slack&quot;]
+  n4[&quot;Log unknown&lt;br/&gt;No Operation&quot;]
+  n5[&quot;Fallback email&lt;br/&gt;Send Email #40;SMTP#41;&quot;]
+  n0 --&gt; n1
+  n1 --&gt;|&quot;urgent&quot;| n2
+  n1 --&gt;|&quot;normal&quot;| n3
+  n1 --&gt;|&quot;fallback&quot;| n4
+  n2 --&gt;|&quot;error&quot;| n5
+  classDef trig fill:#e8f5e9,stroke:#2e7d32;
+  classDef sub fill:#f3e5f5,stroke:#6a1b9a;
+  classDef off fill:#eee,stroke:#999,color:#777,stroke-dasharray: 4 3;
+  class n0 trig;</pre></div><details class="srcbox"><summary>Diagram source (text fallback)</summary><pre class="src">flowchart TD
+  n0([&quot;Called by agent&lt;br/&gt;Execute Workflow trigger&quot;])
+  n1{&quot;Route by urgency&lt;br/&gt;Switch&quot;}
+  n2[&quot;Page on-call&lt;br/&gt;Slack&quot;]
+  n3[&quot;Queue for morning&lt;br/&gt;Slack&quot;]
+  n4[&quot;Log unknown&lt;br/&gt;No Operation&quot;]
+  n5[&quot;Fallback email&lt;br/&gt;Send Email #40;SMTP#41;&quot;]
+  n0 --&gt; n1
+  n1 --&gt;|&quot;urgent&quot;| n2
+  n1 --&gt;|&quot;normal&quot;| n3
+  n1 --&gt;|&quot;fallback&quot;| n4
+  n2 --&gt;|&quot;error&quot;| n5
+  classDef trig fill:#e8f5e9,stroke:#2e7d32;
+  classDef sub fill:#f3e5f5,stroke:#6a1b9a;
+  classDef off fill:#eee,stroke:#999,color:#777,stroke-dasharray: 4 3;
+  class n0 trig;</pre></details>
+<h3>Steps</h3>
+<ol><li>Called by agent: Execute Workflow trigger. Next: Route by urgency</li><li>Route by urgency: Switch, routes to 2 case(s). Next: Page on-call (urgent), Queue for morning (normal), Log unknown (fallback)</li><li>Page on-call: Slack, message / post. Next: Fallback email (error)</li><li>Queue for morning: Slack, message / post</li><li>Log unknown: No Operation</li><li>Fallback email: Send Email (SMTP)</li></ol>
+<h3>External services</h3>
+<div class="tw"><table><thead><tr><th>Service</th><th>Used by node(s)</th><th>Credential(s) (name / type)</th></tr></thead><tbody><tr><td>Slack</td><td>Page on-call, Queue for morning</td><td>Slack bot / slackApi</td></tr><tr><td>SMTP email</td><td>Fallback email</td><td>SMTP relay / smtp</td></tr></tbody></table></div>
+<h3>Credentials (names and types only, never values)</h3>
+<div class="tw"><table><thead><tr><th>Name</th><th>Type</th><th>Node(s)</th></tr></thead><tbody><tr><td>Slack bot</td><td>slackApi</td><td>Page on-call, Queue for morning</td></tr><tr><td>SMTP relay</td><td>smtp</td><td>Fallback email</td></tr></tbody></table></div>
+<h3>Environment variables and n8n variables referenced</h3>
+<p>None.</p>
+<h3>Webhooks</h3>
+<p>None.</p>
+<h3>Error handling</h3>
+<ul><li>Error workflow: not set</li><li>Retry on fail: not used</li><li>Continue on fail: not used</li><li>Error output branch: Page on-call</li></ul>
+<p class="note warn"><strong>Warning:</strong> No error workflow is set: a failure is visible only in the n8n Executions list.</p>
+<p class="note warn"><strong>Warning:</strong> No node that calls an external service has retry-on-fail enabled.</p>
+<h3>Rate limits and caps</h3>
+<p>No explicit caps found in node settings.</p>
+<h3>Sub-workflows called</h3>
+<p>None.</p>
+<h3>Warnings</h3>
+<p>None.</p>
+<h3>When it breaks</h3>
+<div class="tw"><table><thead><tr><th>Area</th><th>Symptom</th><th>Likely cause</th><th>Where to look</th></tr></thead><tbody><tr><td>Slack</td><td>Auth failed</td><td>Bot token or API key revoked/regenerated, or the bot was removed from the channel/chat</td><td>Node(s): Page on-call, Queue for morning. Re-add the bot; replace the credential</td></tr><tr><td>Slack</td><td>429 / flood limits</td><td>Provider send-rate limit (messages per second or per chat)</td><td>Node(s): Page on-call, Queue for morning. Space out sends with a Wait node</td></tr><tr><td>Slack</td><td>Message rejected</td><td>Message too long, bad formatting, or recipient opted out or is invalid</td><td>Node(s): Page on-call, Queue for morning. Open the failed execution and read the response body</td></tr><tr><td>SMTP email</td><td>Auth failed</td><td>Mailbox password or app password changed, API key rotated, or 2FA policy changed</td><td>Node(s): Fallback email. Replace the credential; for Gmail-style SMTP use an app password</td></tr><tr><td>SMTP email</td><td>Sending limit reached</td><td>Daily send cap of the provider or mailbox reached</td><td>Node(s): Fallback email. Check provider limits; spread sends over time</td></tr><tr><td>SMTP email</td><td>Delivered to spam or bounced</td><td>SPF/DKIM/DMARC missing or sender domain changed</td><td>Node(s): Fallback email. Check DNS records and the provider bounce log</td></tr></tbody></table></div>
+<p>First step for any failure: n8n &gt; Executions &gt; filter by this workflow &gt; open the red execution &gt; the failing node is highlighted and its error text is on the right.</p>
+</section>
+<section class="wf" id="wf-error-alert">
+<h2 id="wf-error-alert">Error alert</h2>
+<p>This workflow runs when another workflow fails (it is an error workflow). Along the way it uses Telegram. It is an error handler for other workflows.</p>
+<div class="tw"><table><thead><tr><th>Item</th><th>Value</th></tr></thead><tbody><tr><td>Active</td><td>yes</td></tr><tr><td>Nodes</td><td>2</td></tr><tr><td>Tags</td><td>none</td></tr><tr><td>Trigger</td><td>On any failure (error)</td></tr><tr><td>Schedule</td><td>not scheduled</td></tr></tbody></table></div>
+<h3>Flow</h3>
+<div class="diagram"><pre class="mermaid">flowchart TD
+  n0([&quot;On any failure&lt;br/&gt;Error trigger&quot;])
+  n1[&quot;Tell the team&lt;br/&gt;Telegram&quot;]
+  n0 --&gt; n1
+  classDef trig fill:#e8f5e9,stroke:#2e7d32;
+  classDef sub fill:#f3e5f5,stroke:#6a1b9a;
+  classDef off fill:#eee,stroke:#999,color:#777,stroke-dasharray: 4 3;
+  class n0 trig;</pre></div><details class="srcbox"><summary>Diagram source (text fallback)</summary><pre class="src">flowchart TD
+  n0([&quot;On any failure&lt;br/&gt;Error trigger&quot;])
+  n1[&quot;Tell the team&lt;br/&gt;Telegram&quot;]
+  n0 --&gt; n1
+  classDef trig fill:#e8f5e9,stroke:#2e7d32;
+  classDef sub fill:#f3e5f5,stroke:#6a1b9a;
+  classDef off fill:#eee,stroke:#999,color:#777,stroke-dasharray: 4 3;
+  class n0 trig;</pre></details>
+<h3>Steps</h3>
+<ol><li>On any failure: Error trigger. Next: Tell the team</li><li>Tell the team: Telegram</li></ol>
+<h3>External services</h3>
+<div class="tw"><table><thead><tr><th>Service</th><th>Used by node(s)</th><th>Credential(s) (name / type)</th></tr></thead><tbody><tr><td>Telegram</td><td>Tell the team</td><td>Alert bot / telegramApi</td></tr></tbody></table></div>
+<h3>Credentials (names and types only, never values)</h3>
+<div class="tw"><table><thead><tr><th>Name</th><th>Type</th><th>Node(s)</th></tr></thead><tbody><tr><td>Alert bot</td><td>telegramApi</td><td>Tell the team</td></tr></tbody></table></div>
+<h3>Environment variables and n8n variables referenced</h3>
+<ul><li>$env: ALERT_CHAT_ID</li></ul>
+<h3>Webhooks</h3>
+<p>None.</p>
+<h3>Error handling</h3>
+<ul><li>This workflow IS an error workflow (has an Error Trigger).</li><li>Retry on fail: Tell the team (max 3 tries)</li><li>Continue on fail: not used</li><li>Error output branch: not used</li></ul>
+<h3>Rate limits and caps</h3>
+<p>No explicit caps found in node settings.</p>
+<h3>Sub-workflows called</h3>
+<p>None.</p>
+<h3>Warnings</h3>
+<p>None.</p>
+<h3>When it breaks</h3>
+<div class="tw"><table><thead><tr><th>Area</th><th>Symptom</th><th>Likely cause</th><th>Where to look</th></tr></thead><tbody><tr><td>Telegram</td><td>Auth failed</td><td>Bot token or API key revoked/regenerated, or the bot was removed from the channel/chat</td><td>Node(s): Tell the team. Re-add the bot; replace the credential</td></tr><tr><td>Telegram</td><td>429 / flood limits</td><td>Provider send-rate limit (messages per second or per chat)</td><td>Node(s): Tell the team. Space out sends with a Wait node</td></tr><tr><td>Telegram</td><td>Message rejected</td><td>Message too long, bad formatting, or recipient opted out or is invalid</td><td>Node(s): Tell the team. Open the failed execution and read the response body</td></tr></tbody></table></div>
+<p>First step for any failure: n8n &gt; Executions &gt; filter by this workflow &gt; open the red execution &gt; the failing node is highlighted and its error text is on the right.</p>
+</section>
+<p class="note info">Generated by n8n-handover-docs. No credential values, credential IDs or API keys are written to this file.</p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js" integrity="sha384-rbtjAdnIQE/aQJGEgXrVUlMibdfTSa4PQju4HDhN3sR2PmaKFzhEafuePsl9H/9I" crossorigin="anonymous"></script>
+<script>
+(function(){
+  if(!window.mermaid){return;}
+  mermaid.initialize({startOnLoad:false,securityLevel:'strict',theme:'neutral',maxTextSize:500000,maxEdges:5000});
+  var els=document.querySelectorAll('pre.mermaid');
+  els.forEach(function(el,i){
+    mermaid.render('mmd'+i,el.textContent).then(function(r){
+      var d=document.createElement('div');d.className='rendered';d.innerHTML=r.svg;
+      el.parentNode.replaceChild(d,el);
+    }).catch(function(){
+      var p=document.createElement('p');p.className='note warn';p.textContent='Diagram could not be drawn. The text version is below.';
+      el.parentNode.insertBefore(p,el);
+      var sb=el.parentNode.parentNode.querySelector('.srcbox');if(sb){sb.open=true;}
+    });
+  });
+})();
+</script></body></html>

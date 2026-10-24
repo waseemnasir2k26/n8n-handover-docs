@@ -1,0 +1,94 @@
+{
+  "id": "wf-demo-0003-escalation",
+  "name": "Escalation to Slack",
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "c1",
+      "name": "Called by agent",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "id": "c2",
+      "name": "Route by urgency",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [220, 0],
+      "parameters": {
+        "rules": {
+          "values": [{ "outputKey": "urgent" }, { "outputKey": "normal" }]
+        },
+        "options": { "fallbackOutput": "extra" }
+      }
+    },
+    {
+      "id": "c3",
+      "name": "Page on-call",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [460, -120],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channel": "#oncall"
+      },
+      "credentials": {
+        "slackApi": { "id": "cred-SYNTH-a2e19b00", "name": "Slack bot" }
+      }
+    },
+    {
+      "id": "c4",
+      "name": "Queue for morning",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [460, 40],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channel": "#support"
+      },
+      "credentials": {
+        "slackApi": { "id": "cred-SYNTH-a2e19b00", "name": "Slack bot" }
+      }
+    },
+    {
+      "id": "c5",
+      "name": "Log unknown",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [460, 200],
+      "parameters": {}
+    },
+    {
+      "id": "c6",
+      "name": "Fallback email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [700, -100],
+      "parameters": { "toEmail": "ops@example-client.test" },
+      "credentials": {
+        "smtp": { "id": "cred-SYNTH-6d7712ee", "name": "SMTP relay" }
+      }
+    }
+  ],
+  "connections": {
+    "Called by agent": {
+      "main": [[{ "node": "Route by urgency", "type": "main", "index": 0 }]]
+    },
+    "Route by urgency": {
+      "main": [
+        [{ "node": "Page on-call", "type": "main", "index": 0 }],
+        [{ "node": "Queue for morning", "type": "main", "index": 0 }],
+        [{ "node": "Log unknown", "type": "main", "index": 0 }]
+      ]
+    },
+    "Page on-call": {
+      "main": [[], [{ "node": "Fallback email", "type": "main", "index": 0 }]]
+    }
+  }
+}
