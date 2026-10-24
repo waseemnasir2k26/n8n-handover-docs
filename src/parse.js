@@ -527,7 +527,11 @@ function analyzeWorkflow(wf, ctx = {}) {
       n.short === "formTrigger" ||
       n.short === "chatTrigger"
     ) {
-      const path = maskPath(scrubText(plain(p.path) || plain(p.formPath) || (raw.webhookId ? "(auto-generated path)" : "(dynamic path)")), ctx.showWebhookPaths);
+      const rawPath = plain(p.path) || plain(p.formPath) || (raw.webhookId ? "(auto-generated path)" : "(dynamic path)");
+      // paths work like passwords: shortened by their own rule, never counted as names
+      const path = ctx.showWebhookPaths
+        ? scrubText(rawPath)
+        : maskPath(rawPath.startsWith("(") || /^[\w\-/:.~]{1,200}$/.test(rawPath) ? rawPath : "\u2026", false);
       const method =
         n.short === "webhook"
           ? (Array.isArray(p.httpMethod) ? p.httpMethod : [plain(p.httpMethod) || "GET"]).slice(0, 7).map((m) => pickMethod(m, "CUSTOM")).join("/")
@@ -764,7 +768,24 @@ function analyzeWorkflow(wf, ctx = {}) {
   model.hiddenNotes = hiddenNotes;
   model.includeNotes = !!ctx.includeNotes;
   model.summary = plainSummary(model);
-  model.redactedNames = COUNT.names;
+  // what a reader can actually see was changed, by kind
+  const visible = new Set([model.name, ...model.nodes.filter((x) => x.kind !== "note").map((x) => x.name), ...model.tags, ...model.credentials.map((c) => c.name), ...model.subWorkflows.map((x) => x.name || ""), ...model.pinned, model.errorHandling.errorWorkflow.name || ""]);
+  const redactedNamesSeen = [...visible].filter((x) => x.includes("[redacted]"));
+  const noteText = model.notes.join(" ");
+  const countOf = (text, needle) => text.split(needle).length - 1;
+  const allNames = [...visible].join(" ");
+  model.redactionSummary = {
+    names: redactedNamesSeen.length,
+    identifiers: model.nodes.filter((x) => x.short === "custom").length + model.credentials.filter((c) => c.type === "custom").length + model.env.env.concat(model.env.vars, model.env.secrets).filter((x) => x === "custom").length + model.edges.filter((e) => e.type === "custom").length,
+    webhookPaths: model.webhooks.filter((w) => w.path.endsWith("\u2026")).length,
+    notesHidden: ctx.includeNotes ? 0 : hiddenNotes,
+    notesIncluded: ctx.includeNotes ? model.notes.length : 0,
+    notesRedacted: model.notes.filter((x) => x.includes("[redacted]")).length,
+    parameterSecrets: model.secrets.length,
+    urlsHidden: countOf(allNames + " " + noteText, "<url hidden>"),
+    contactsHidden: countOf(noteText, "<email hidden>") + countOf(noteText, "<phone hidden>"),
+  };
+  model.redactedNames = model.redactionSummary.names;
   return model;
 }
 

@@ -1,2 +1,4 @@
 * text=auto eol=lf
 *.png binary
+examples/sample-pack/** text eol=lf
+examples/workflows/** text eol=lf

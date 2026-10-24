@@ -16,7 +16,10 @@ const SECRETS = {
     "login pw = Tr0ub4dor&3",
   ],
   b64: ["key: " + b64, "c2stcHJvai1BQkNERUZHSDEyMzQ1Njc4Wlpa"],
-  urlenc: ["api_key%3D" + "SUPERSECRET" + "VALUE99", "token%3D" + "abcd1234" + "efgh5678"],
+  urlenc: [
+    "api_key%3D" + "SUPERSECRET" + "VALUE99",
+    "token%3D" + "abcd1234" + "efgh5678",
+  ],
   expr: [
     '={{ "sk-ABCDEFGHIJKLMNOPQRSTUV123" }}',
     '{{ "hunter2hunter2xyz" }} is the password',
@@ -276,7 +279,83 @@ const EXTRA = {
   entity_kw: ["&#112;assword&colon; Winter2026!!", "Winter2026!!"],
   greek: ["ραssword: Winter2026!!", "Winter2026!!"],
 };
+// round 5: numeric codes, spoken digits, NATO words, emoji labels, more languages
+Object.assign(EXTRA, {
+  pin_a: ["pin: 4821", "4821"],
+  pin_b: ["my pin is 4821", "4821"],
+  pin_door: ["door code: 4821", "4821"],
+  pin_gate: ["gate code is 4821", "4821"],
+  pin_safe: ["safe code 4821", "4821"],
+  pin_reset: ["Reset PIN 482193", "482193"],
+  pin_attached: ["pin:4821", "4821"],
+  pin_otp: ["otp 835512", "835512"],
+  pin_security: ["security code: 7731", "7731"],
+  pin_verify: ["verification code is 902144", "902144"],
+  pin_access: ["access code 482 193", "482 193"],
+  pin_spoken: ["PIN code: four eight two one", "four eight two one"],
+  pin_nato: ["alarm code is tango alpha", "tango alpha"],
+  pin_nato2: ["door code: whiskey tango foxtrot", "whiskey tango foxtrot"],
+  emoji_key: ["\u{1F511} hunter22", "hunter22"],
+  emoji_lock: ["\u{1F512}hunter22", "hunter22"],
+  emoji_colon: ["\u{1F510}: winter phrase", "winter phrase"],
+  emoji_old: ["\u{1F5DD}️ Tr0ub4dor", "Tr0ub4dor"],
+  lang_de: ["Kennwort: Sommer2026x", "Sommer2026x"],
+  lang_vi: ["mật khẩu: Mua2026xy", "Mua2026xy"],
+  lang_th: ["รหัสผ่าน: ฝน123", "ฝน123"],
+  lang_zh: ["密码：蓝天白云88", "蓝天白云88"],
+  lang_ru: ["пароль: Лето2026", "Лето2026"],
+  lang_ar: ["كلمة السر: شمس٢٠٢٦", "شمس٢٠٢٦"],
+  lang_hi: ["पासवर्ड: सूरज99", "सूरज99"],
+  lang_ja: ["パスワード: さくら77", "さくら77"],
+  lang_ko: ["비밀번호: 하늘123", "하늘123"],
+  lang_es: ["contraseña: Verano2026x", "Verano2026x"],
+  lang_fr: ["mot de passe: Ete2026xy", "Ete2026xy"],
+  lang_pt: ["senha: Verao2026x", "Verao2026x"],
+  lang_tr: ["şifre: Yaz2026xy", "Yaz2026xy"],
+  lang_id: ["kata sandi: Musim2026x", "Musim2026x"],
+  lang_ur: ["پاسورڈ: گرمی99", "گرمی99"],
+});
 const EXTRA_FIELDS = ["sticky", "nodename", "wfname", "tag", "credname"];
+
+// Cases the final gate must catch even if the scrubber were bypassed: text injected into the finished
+// files after rendering (index.md, a workflow .md, index.html, inventory.csv).
+const INJECT = [
+  "password: " + "Winter" + "2026!!",
+  "pw is " + "Winter" + "2026!!",
+  "api_key=" + "Zq8wRt5Yu3Kp9mX2",
+  "token: " + "Xk29qLm" + "8842",
+  "Authorization: Token " + "AuthTok" + "Canary8842xx",
+  "Qw3rTy" + "Ui0pAs" + "Df7gHj" + "Kl9zXc",
+  "a3f5c9d2e1b04a7788c6d5e4f3a2b1c0",
+  "c2VjcmV0cGFzc3dvcmQ5OTk5OTk5OTk5OQ==",
+  "pass%77ord%3A%20" + "Winter2026",
+  "api_key%3D" + "SUPERSECRET" + "VALUE99",
+  "pin: 4821",
+  "my pin is 4821",
+  "door code: 4821",
+  "safe code 4821",
+  "Reset PIN 482193",
+  "PIN code: four eight two one",
+  "alarm code is tango alpha",
+  "the code to the safe is 4 8 1 5 9 2",
+  "card 4242 4242 4242 4242",
+  "ssn 123-45-6789",
+  "\u{1F511} hunter22",
+  "\u{1F512}: hunter22",
+  "Kennwort: Sommer2026x",
+  "mật khẩu: Mua2026xy",
+  "รหัสผ่าน: ฝน123",
+  "密码：蓝天白云88",
+  "пароль: Лето2026",
+  "كلمة السر: شمس٢٠٢٦",
+  "पासवर्ड: सूरज99",
+  "パスワード: さくら77",
+  "비밀번호: 하늘123",
+  "contraseña: Verano2026x",
+  "mot de passe: Ete2026xy",
+  "senha: Verao2026x",
+  "kata sandi: Musim2026x",
+];
 
 function tokensOf(s) {
   return (s.match(/[A-Za-z0-9!&#%@_+=/.-]{8,}/g) || []).filter(
@@ -351,7 +430,11 @@ function* cases() {
         position: [0, 200],
         parameters: {
           content:
-            "## creds\nlogin: admin / Tr0ub4dor&3\nconnection string postgres://admin:Tr0ub4dor3@10.0.0.5/db\nkey (base64): c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0\nAPI KEY → " + "sk_" + "live_abcdefghij" + "klmnopqrstu" + "\n[click](javascript:alert(1)) <script>alert(1)</script> ![x](http://evil.example/p.png?d=1)",
+            "## creds\nlogin: admin / Tr0ub4dor&3\nconnection string postgres://admin:Tr0ub4dor3@10.0.0.5/db\nkey (base64): c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0\nAPI KEY → " +
+            "sk_" +
+            "live_abcdefghij" +
+            "klmnopqrstu" +
+            "\n[click](javascript:alert(1)) <script>alert(1)</script> ![x](http://evil.example/p.png?d=1)",
         },
       },
       {
@@ -399,4 +482,4 @@ function* cases() {
   };
 }
 
-module.exports = { cases, SECRETS, FIELDS, EXTRA };
+module.exports = { cases, SECRETS, FIELDS, EXTRA, INJECT };

@@ -2,7 +2,20 @@
 
 Generated 2026-10-25. 5 workflow(s). Credential values and IDs are never copied into this pack.
 
-> **Note:** 1 sticky note(s) hidden (use --include-notes to include them; they are then redacted best-effort). 1 name(s) were partly replaced with \[redacted\] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it. independent gitleaks scan: run, no findings.
+> **Note:** Best-effort: read every pack before you send it to a client. 1 sticky note(s) hidden (use --include-notes to include them; they are then redacted best-effort). 1 name(s) were partly replaced with \[redacted\] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it. independent gitleaks scan: run, no findings.
+
+## What was redacted or hidden
+
+| Kind | Count |
+| --- | --- |
+| Sticky notes hidden | 1 |
+| Notes with a value replaced by \[redacted\] | 0 |
+| Names with a value replaced by \[redacted\] | 1 |
+| Identifiers replaced by "custom" (types, variable names) | 0 |
+| Webhook paths shortened | 1 |
+| Hard-coded secrets found in parameters (location only, never copied) | 1 |
+| URLs hidden in names and notes | 0 |
+| E-mails and phone numbers hidden in notes | 0 |
 
 ## Workflows
 

@@ -288,12 +288,49 @@ function indexBlocks(items, opts = {}) {
     text: `Generated ${opts.date}. ${items.length} workflow(s). Credential values and IDs are never copied into this pack.`,
   });
   const hidden = items.reduce((n, { m }) => n + m.hiddenNotes, 0);
-  const redacted = items.reduce((n, { m }) => n + m.redactedNames, 0);
+  const redacted = items.reduce((n, { m }) => n + (m.redactedNames || 0), 0);
   const includeNotes = items.some(({ m }) => m.includeNotes);
   b.push({
     t: "note",
     kind: "info",
-    text: `${hidden} sticky note(s) ${includeNotes ? "included, redacted best-effort" : "hidden (use --include-notes to include them; they are then redacted best-effort)"}. ${redacted} name(s) were partly replaced with [redacted] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it. ${opts.gitleaksNote || "independent gitleaks scan: not run"}.`,
+    text: `Best-effort: read every pack before you send it to a client. ${hidden} sticky note(s) ${includeNotes ? "included, redacted best-effort" : "hidden (use --include-notes to include them; they are then redacted best-effort)"}. ${redacted} name(s) were partly replaced with [redacted] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it. ${opts.gitleaksNote || "independent gitleaks scan: not run"}.`,
+  });
+  const sum = (k) =>
+    items.reduce(
+      (n, { m }) => n + ((m.redactionSummary && m.redactionSummary[k]) || 0),
+      0,
+    );
+  b.push({ t: "h", l: 2, text: "What was redacted or hidden" });
+  b.push({
+    t: "table",
+    head: ["Kind", "Count"],
+    rows: [
+      [
+        includeNotes
+          ? "Sticky notes included (best-effort redacted)"
+          : "Sticky notes hidden",
+        String(includeNotes ? sum("notesIncluded") : sum("notesHidden")),
+      ],
+      [
+        "Notes with a value replaced by [redacted]",
+        String(sum("notesRedacted")),
+      ],
+      ["Names with a value replaced by [redacted]", String(sum("names"))],
+      [
+        'Identifiers replaced by "custom" (types, variable names)',
+        String(sum("identifiers")),
+      ],
+      ["Webhook paths shortened", String(sum("webhookPaths"))],
+      [
+        "Hard-coded secrets found in parameters (location only, never copied)",
+        String(sum("parameterSecrets")),
+      ],
+      ["URLs hidden in names and notes", String(sum("urlsHidden"))],
+      [
+        "E-mails and phone numbers hidden in notes",
+        String(sum("contactsHidden")),
+      ],
+    ],
   });
   b.push({ t: "h", l: 2, text: "Workflows" });
   b.push({

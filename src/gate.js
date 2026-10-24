@@ -9,7 +9,15 @@ const cp = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { ALL_LABELS, CJK_LABELS, CODE_WORDS } = require("./labels");
+const {
+  ALL_LABELS,
+  CJK_LABELS,
+  CODE_WORDS,
+  EMOJI_LABELS,
+  PIN_LABELS,
+  SPOKEN_DIGITS,
+  NATO,
+} = require("./labels");
 
 const LABEL_SET = new Set(ALL_LABELS);
 const SPLIT = /[\s"'<>()[\]{},;|=:\\：]+/;
@@ -165,13 +173,35 @@ function scanText(text) {
       // CJK / Hangul / Kana labels inside tokens: 密码是蓝天白云88, パスワード:さくら77
       for (const lab of CJK_LABELS) {
         const at = line.indexOf(lab);
+        if (at < 0) continue;
+        // what directly follows the label (skipping separators) must not be markup or a redaction marker
+        const rest = line
+          .slice(at + lab.length)
+          .replace(/^[\s:\uff1a=\u662f\u4e3a]+/u, "");
         if (
-          at >= 0 &&
-          /\p{N}|[A-Za-z]/u.test(
-            line.slice(at + lab.length, at + lab.length + 24),
-          )
+          /^[\p{L}\p{N}]/u.test(rest) &&
+          /\p{N}|[A-Za-z]/u.test(rest.slice(0, 24))
         )
           add("credential label followed by a value");
+      }
+      // an emoji label with an explicit colon takes whatever follows ("🔐: winter phrase")
+      for (const e of EMOJI_LABELS) {
+        let from = 0;
+        for (
+          let at = line.indexOf(e, from);
+          at >= 0;
+          at = line.indexOf(e, from)
+        ) {
+          from = at + e.length;
+          const after = line.slice(from).replace(/^️/u, "");
+          const m = /^\s*[:=]\s*(\S+)/u.exec(after);
+          if (
+            m &&
+            !/^\\?\[?redacted/i.test(m[1]) &&
+            /^[\p{L}\p{N}]/u.test(m[1])
+          )
+            add("emoji label with a colon followed by text");
+        }
       }
       // spaced digit runs (4 8 1 5 9 2) and grouped numbers (cards, IBANs)
       let run = 0;
@@ -206,6 +236,54 @@ function scanText(text) {
           for (const nx of tokens.slice(k + 1, k + 10))
             d += /^\p{Nd}$/u.test(nx) ? 1 : 0;
           if (d >= 4) add("code label followed by spaced digits");
+        }
+        // pin / door code / otp followed by digits, spoken digits or NATO words
+        const lab1 = t.replace(EDGE, "").toLowerCase().replace(/[-_]/g, "");
+        const lab2 =
+          lab1 + (tokens[k + 1] || "").replace(EDGE, "").toLowerCase();
+        const pinAt = PIN_LABELS.has(lab1) ? 1 : PIN_LABELS.has(lab2) ? 2 : 0;
+        if (pinAt) {
+          const after = tokens.slice(k + pinAt, k + pinAt + 7);
+          if (
+            after.some(
+              (x) =>
+                (x.match(/\p{Nd}/gu) || []).length >= 3 &&
+                !/\p{L}{3,}/u.test(x),
+            )
+          )
+            add("code label followed by digits");
+          let sp = 0;
+          let na = 0;
+          for (const x of after) {
+            const w = x.toLowerCase().replace(/[^\p{L}]/gu, "");
+            sp = SPOKEN_DIGITS.has(w) ? sp + 1 : 0;
+            na = NATO.has(w) ? na + 1 : 0;
+            if (sp === 3) add("code label followed by spoken digits");
+            if (na === 2) add("code label followed by NATO words");
+          }
+        }
+        // emoji labels (key, lock) followed by a value
+        // glued form: key-emoji followed directly by the value
+        const glued = EMOJI_LABELS.find(
+          (e) => t.startsWith(e) && t.length > e.length,
+        );
+        if (glued) {
+          const restG = t.slice(glued.length).replace(/^[️:=]+/u, "");
+          if (restG && (valueLike(restG) || /\p{N}/u.test(restG)))
+            add("emoji label followed by a value");
+        }
+        if (EMOJI_LABELS.includes(t.replace(/[️:=]/g, ""))) {
+          for (const nx of tokens.slice(k + 1, k + 4)) {
+            if (/^\\?\[?redacted/i.test(nx)) break;
+            if (
+              valueLike(nx) ||
+              ((/\p{N}/u.test(nx) || /[!@#$%^&*+~]/.test(nx)) &&
+                codePoints(nx).length >= 3)
+            ) {
+              add("emoji label followed by a value");
+              break;
+            }
+          }
         }
       });
     });

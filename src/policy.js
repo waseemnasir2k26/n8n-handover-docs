@@ -6,7 +6,16 @@
 // "Keyword", "Credit" are ordinary words), and a credential word alone is not a secret:
 // "Send Token Report" stays, "token: ghp_..." becomes "token: [redacted]".
 const { VALUE_PATTERNS } = require("./secrets");
-const { STRONG, WEAK, CJK_LABELS, CODE_WORDS } = require("./labels");
+const {
+  STRONG,
+  WEAK,
+  CJK_LABELS,
+  CODE_WORDS,
+  EMOJI_LABELS,
+  PIN_LABELS,
+  SPOKEN_DIGITS,
+  NATO,
+} = require("./labels");
 
 const CONNECTORS = new Set([
   ":",
@@ -362,7 +371,92 @@ function joinSpelled(tokens) {
   return out;
 }
 
-const isCjk = (t) => /[぀-ヿ㐀-鿿가-힯]/.test(t);
+const isCjk = (t) => /[฀-๿぀-ヿ㐀-鿿가-힯]/.test(t);
+
+// code-type labels: pin, otp, "door code", "safe code", "access code" ...
+const labelKey = (t) =>
+  fold(String(t).replace(EDGE, "")).replace(/[-_\s]/g, "");
+function pinLabelSpan(tokens, i) {
+  if (PIN_LABELS.has(labelKey(tokens[i]))) return 1;
+  if (
+    i + 1 < tokens.length &&
+    PIN_LABELS.has(labelKey(tokens[i] + tokens[i + 1]))
+  )
+    return 2;
+  return 0;
+}
+const PIN_SKIP = new Set([
+  ...CONNECTORS,
+  "number",
+  "no",
+  "no.",
+  "#",
+  "code",
+  "digits",
+  "digit",
+  "numbers",
+]);
+// marks a numeric, spoken-digit or NATO value starting after a code label; true when something was marked
+function markCodeValue(tokens, start, mark) {
+  const n = tokens.length;
+  let p = start;
+  for (let steps = 0; p < n && steps < 4; steps++) {
+    const low = tokens[p]
+      .toLowerCase()
+      .replace(/^[^\p{L}\p{N}:=→\-–—/#>]+|[^\p{L}\p{N}:=→\-–—/#>.]+$/gu, "");
+    const bare = tokens[p].toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+    if (!PIN_SKIP.has(low) && !PIN_SKIP.has(bare)) break;
+    p++;
+  }
+  if (p >= n) return false;
+  const word = (t) => (t || "").toLowerCase().replace(/[^\p{L}]/gu, "");
+  const countDig = (t) => (t.match(/\p{Nd}/gu) || []).length;
+  // digits: 4821, 482193, 48-21, "48 21"
+  if (
+    countDig(tokens[p]) >= 3 &&
+    cpLen(tokens[p]) <= 12 &&
+    !/\p{L}{3,}/u.test(tokens[p])
+  ) {
+    mark[p] = true;
+    for (
+      let q = p + 1;
+      q < Math.min(n, p + 4) && /^[\p{Nd}-]{1,6}$/u.test(tokens[q]);
+      q++
+    )
+      mark[q] = true;
+    return true;
+  }
+  if (
+    countDig(tokens[p]) >= 1 &&
+    cpLen(tokens[p]) <= 4 &&
+    /^\p{Nd}+$/u.test(tokens[p])
+  ) {
+    let q = p;
+    let digits = 0;
+    while (q < n && /^\p{Nd}{1,4}$/u.test(tokens[q])) {
+      digits += tokens[q].length;
+      q++;
+    }
+    if (digits >= 3) {
+      for (let r = p; r < q; r++) mark[r] = true;
+      return true;
+    }
+  }
+  let q = p;
+  while (q < n && SPOKEN_DIGITS.has(word(tokens[q]))) q++;
+  if (q - p >= 3) {
+    for (let r = p; r < q; r++) mark[r] = true;
+    return true;
+  }
+  q = p;
+  while (q < n && NATO.has(word(tokens[q]))) q++;
+  if (q - p >= 2) {
+    for (let r = p; r < q; r++) mark[r] = true;
+    return true;
+  }
+  return false;
+}
+const EMOJI_RE = new RegExp(`^(?:${EMOJI_LABELS.join("|")})`, "u");
 
 /**
  * Sanitise a user-written string. opts.kind: 'name' (default) or 'note' (stricter, used for sticky notes).
@@ -383,7 +477,21 @@ function sanitizeText(input, opts = {}) {
     "[redacted]",
   );
   s = s.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[redacted]");
-  const tokens = joinSpelled(s.split(" "));
+  // an emoji label glued to its value ("🔑hunter22") becomes two tokens
+  const tokens = joinSpelled(s.split(" ")).flatMap((t) => {
+    const em = EMOJI_RE.exec(t);
+    return em &&
+      t.length > em[0].length &&
+      !/^[:=]*$/.test(t.slice(em[0].length))
+      ? [
+          em[0],
+          t
+            .slice(em[0].length)
+            .replace(/^([:=])/, "$1 ")
+            .trim(),
+        ].flatMap((x) => x.split(" "))
+      : [t];
+  });
   const n = tokens.length;
   const mark = new Array(n).fill(false);
   const partial = new Map();
@@ -422,6 +530,36 @@ function sanitizeText(input, opts = {}) {
       mark[i] = true;
       continue;
     }
+    // emoji labels: 🔑 hunter22, 🔐: some words
+    if (EMOJI_RE.test(t) && cpLen(t.replace(/[:=]$/, "")) === 1) {
+      const colon = /[:=]$/.test(t);
+      let j = i + 1;
+      for (
+        let steps = 0;
+        j < n && steps < 3 && CONNECTORS.has(tokens[j].toLowerCase());
+        steps++
+      )
+        j++;
+      if (j < n) {
+        if (
+          valueLike(tokens[j]) ||
+          (hasDigitOrSymbol(tokens[j]) && cpLen(tokens[j]) >= 3)
+        )
+          mark[j] = true;
+        else if (colon)
+          for (let q = j; q < Math.min(n, j + 4); q++) {
+            mark[q] = true;
+            if (/[.;]$/.test(tokens[q])) break;
+          }
+      }
+      continue;
+    }
+    // code-type labels with a numeric, spoken-digit or NATO value: pin, door code, otp ...
+    const pinSpan = pinLabelSpan(tokens, i);
+    if (pinSpan && markCodeValue(tokens, i + pinSpan, mark)) {
+      i += pinSpan - 1;
+      continue;
+    }
     // CJK labels live inside tokens: 密码是蓝天白云88, パスワード:さくら77
     if (isCjk(t)) {
       const lab = CJK_LABELS.find((l) => t.includes(l));
@@ -447,6 +585,14 @@ function sanitizeText(input, opts = {}) {
     // attached assignment: api_key=VALUE, password:VALUE, "token":"VALUE"
     const m = /^["'`]?([^:=\s"'`]{1,40})["'`]?([:=])["'`]?(.+)$/u.exec(t);
     if (m && !t.includes("://") && kwKind(m[1])) {
+      partial.set(i, `${m[1]}${m[2]}[redacted]`);
+      continue;
+    }
+    if (
+      m &&
+      PIN_LABELS.has(labelKey(m[1])) &&
+      (m[3].match(/\p{Nd}/gu) || []).length >= 3
+    ) {
       partial.set(i, `${m[1]}${m[2]}[redacted]`);
       continue;
     }
@@ -486,8 +632,10 @@ function sanitizeText(input, opts = {}) {
     if (!k) {
       // code / pin / safe / door / alarm followed by a spaced digit run is handled above; also a bare label here
       if (CODE_WORDS.has(fold(t.replace(EDGE, "")))) {
+        const idx = [];
         for (let q = i + 1; q < Math.min(n, i + 9); q++)
-          if (/^\p{Nd}$/u.test(tokens[q])) mark[q] = true;
+          if (/^\p{Nd}$/u.test(tokens[q])) idx.push(q);
+        if (idx.length >= 3) idx.forEach((q) => (mark[q] = true));
       }
       continue;
     }
