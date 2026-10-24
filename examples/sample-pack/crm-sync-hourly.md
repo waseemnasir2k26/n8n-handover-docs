@@ -29,9 +29,9 @@ flowchart TD
 
 ### Steps
 
-1. Every hour: Schedule trigger. Next: Push contacts api\_key=\[redacted\]
-2. Push contacts api\_key=\[redacted\]: HTTP Request, POST a custom endpoint (host hidden). Next: Tell the team
-3. Tell the team: Slack, message / post
+1. Every hour (Schedule trigger). Next: Push contacts api\_key=\[redacted\]
+2. Push contacts api\_key=\[redacted\] (HTTP Request, POST a custom endpoint (host hidden)). Next: Tell the team
+3. Tell the team (Slack, message / post)
 
 ### External services
 

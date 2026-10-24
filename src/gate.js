@@ -10,11 +10,13 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const {
+  STRONG: STRONG_LABELS,
   ALL_LABELS,
   CJK_LABELS,
   CODE_WORDS,
   EMOJI_LABELS,
   PIN_LABELS,
+  SUFFIX_LABELS,
   SPOKEN_DIGITS,
   NATO,
 } = require("./labels");
@@ -63,8 +65,8 @@ function isSlug(t) {
 
 // file names and anchors the pack itself generates: safe-words + a 6-hex hash (flow-password-734a59.md)
 function packName(t) {
-  const m = /^#?(?:wf-)?(.+?)-[0-9a-f]{6}(?:-\d+)?(?:\.md)?$/.exec(t);
-  return !!m && (isSlug(m[1]) || /^\p{L}{1,18}$/u.test(m[1]));
+  const m = /^#?(?:wf-)?(.+?)-h[0-9a-f]{6}(?:-\d+)?(?:\.md)?$/.exec(t);
+  return !!m && (isSlug(m[1]) || /^\p{L}{1,18}\d{0,4}$/u.test(m[1]));
 }
 
 function valueLike(t) {
@@ -75,8 +77,9 @@ function valueLike(t) {
     "",
   );
   if (codePoints(c).length < 6) return false;
-  if (/^\[?redacted\]?$/i.test(c) || isSlug(c)) return false;
-  return (/\p{N}/u.test(c) && /\p{L}/u.test(c)) || /[!@#$%^&*+~]/.test(c);
+  if (/^\[?redacted\]?$/i.test(c) || isSlug(c) || CRED_TYPE_ID.test(c))
+    return false;
+  return (/\p{N}/u.test(c) && /\p{L}/u.test(c)) || /[!@$%^&*+~]/.test(c);
 }
 
 function suspiciousToken(t, depth = 0) {
@@ -150,6 +153,161 @@ function decodeLine(raw) {
     .replace(/\\([\\`*_[\]<>|~&#+\-=.!(){}])/g, "$1");
 }
 
+// ---- labels inside compounds (DB-Password, db_password, dbPassword, Login-PIN) ----
+const GATE_LABELS = new Set([...LABEL_SET, ...PIN_LABELS]);
+const MARK_TOKENS = new Set([
+  ":",
+  "=",
+  "=>",
+  "->",
+  "\u2192",
+  "is",
+  "-",
+  "\u2013",
+  "\u2014",
+  ":=",
+]);
+const SUFFIX_SET = SUFFIX_LABELS;
+function gateWordsRaw(tok) {
+  return tok
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+    .replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, "$1 $2")
+    .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2")
+    .split(/[-_.\s]+/u)
+    .filter(Boolean);
+}
+function hasGlued(tok) {
+  for (const w of gateWordsRaw(tok)) {
+    const lw = w.toLowerCase();
+    if (SUFFIX_SET.some((lab) => lw.length > lab.length && lw.endsWith(lab)))
+      return true;
+    if (/^[A-Z0-9]{4,}$/.test(w) && lw.endsWith("pin")) return true;
+  }
+  return false;
+}
+function gateWords(tok) {
+  return tok
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+    .replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, "$1 $2")
+    .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2")
+    .split(/[-_.\s]+/u)
+    .filter(Boolean)
+    .map((w) => w.toLowerCase().normalize("NFKC"));
+}
+// a label spelled over two or three tokens (mot de passe, kata sandi, API key): the joined words must BE a label
+function isGateLabelExact(joined) {
+  const w = joined
+    .toLowerCase()
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}]/gu, "");
+  return GATE_LABELS.has(w);
+}
+// n8n credential type identifiers (httpHeaderAuth, slackApi, googleSheetsOAuth2Api) are part of every pack
+const CRED_TYPE_ID =
+  /^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]*)*(?:Auth|Api|OAuth2|OAuth2Api)$/;
+function isGateLabel(tok) {
+  if (CRED_TYPE_ID.test(tok.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")))
+    return false;
+  if (hasGlued(tok)) return true;
+  const w = gateWords(tok);
+  for (let a = 0; a < w.length; a++) {
+    for (let b = a + 1; b <= Math.min(w.length, a + 3); b++)
+      if (GATE_LABELS.has(w.slice(a, b).join(""))) return true;
+  }
+  return false;
+}
+const isRedacted = (v) =>
+  /^[\s"'`(\[\\]*redacted[\s"'`)\]\\]*[.,;]?$/i.test(v) ||
+  /^\[redacted/i.test(v);
+const nonEmptyValue = (v) =>
+  !!v &&
+  /[\p{L}\p{N}]/u.test(v) &&
+  !isRedacted(v) &&
+  !/^[<]/.test(v) &&
+  !isGateLabel(v);
+
+/**
+ * Any non-empty value after a credential label (any language, compounds included) with an assignment
+ * marker (: = is -> ...) is a finding. This is the gate's job when the scrubber misses something.
+ */
+const STRONG_GATE = new Set(
+  [...STRONG_LABELS].filter((w) => !/^(pass|sk|pw|pwd)$/.test(w)),
+);
+function isGateStrong(tok) {
+  const w = gateWords(tok);
+  for (let a = 0; a < w.length; a++)
+    for (let b = a + 1; b <= Math.min(w.length, a + 3); b++)
+      if (STRONG_GATE.has(w.slice(a, b).join(""))) return true;
+  return false;
+}
+
+function labelValuePass(line, add) {
+  const toks = line
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\|/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    if (t.startsWith("$") || t.includes("://")) continue;
+    // a name quoted by the pack itself (“name”) is not an assignment
+    if (/[\u201d\u2019\u00bb]$/.test(t.replace(/[:=,.;]+$/, ""))) continue;
+    // attached: DB-Password:Winter25x, API_TOKEN=abc, "password":"x"
+    const m = /^["'`(\[]*([^:=\s"'`]{1,48})["'`]?([:=])["'`]?(.*)$/u.exec(t);
+    if (m && isGateLabel(m[1])) {
+      const v = m[3].replace(/^["'`]+|["'`,;]+$/g, "");
+      if (nonEmptyValue(v)) {
+        add("credential label with an attached value");
+        continue;
+      }
+      if (
+        !v &&
+        i + 1 < toks.length &&
+        nonEmptyValue(toks[i + 1]) &&
+        !MARK_TOKENS.has(toks[i + 1])
+      ) {
+        add("credential label followed by a value");
+        continue;
+      }
+      continue;
+    }
+    // a label of one to three words, then a marker, then a value
+    let span = 0;
+    if (isGateLabel(t)) span = 1;
+    else if (i + 1 < toks.length && isGateLabelExact(t + toks[i + 1])) span = 2;
+    else if (
+      i + 2 < toks.length &&
+      isGateLabelExact(t + toks[i + 1] + toks[i + 2])
+    )
+      span = 3;
+    if (!span || (span === 1 && !isGateLabel(t))) continue;
+    let p = i + span;
+    let marked = /[:=]$/.test(toks[p - 1]);
+    if (!marked && p < toks.length && MARK_TOKENS.has(toks[p].toLowerCase())) {
+      marked = true;
+      p++;
+    }
+    while (marked && p < toks.length && MARK_TOKENS.has(toks[p].toLowerCase()))
+      p++;
+    if (!marked) {
+      // "the password for the CRM is X": a marker word a few words later
+      if (isGateStrong(toks.slice(i, i + span).join("")))
+        for (let q = p; q < Math.min(toks.length, p + 6); q++)
+          if (/^(is|=|=>|\u2192)$/i.test(toks[q])) {
+            marked = true;
+            p = q + 1;
+            break;
+          }
+    }
+    if (
+      marked &&
+      p < toks.length &&
+      nonEmptyValue(toks[p].replace(/^["'`]+|["'`,;]+$/g, ""))
+    )
+      add("credential label followed by an assigned value");
+  }
+}
+
 const labelWord = (t) => {
   const w = t.replace(EDGE, "").toLowerCase();
   return LABEL_SET.has(w) || LABEL_SET.has(w.replace(/[-_\s]/g, ""));
@@ -170,6 +328,7 @@ function scanText(text) {
           hits.push({ line: i + 1, kind });
         }
       };
+      labelValuePass(line, add);
       // CJK / Hangul / Kana labels inside tokens: 密码是蓝天白云88, パスワード:さくら77
       for (const lab of CJK_LABELS) {
         const at = line.indexOf(lab);
@@ -180,7 +339,7 @@ function scanText(text) {
           .replace(/^[\s:\uff1a=\u662f\u4e3a]+/u, "");
         if (
           /^[\p{L}\p{N}]/u.test(rest) &&
-          /\p{N}|[A-Za-z]/u.test(rest.slice(0, 24))
+          /\p{N}|[A-Za-z]/u.test(rest.split(/[\s|<\]\[()]/)[0].slice(0, 24))
         )
           add("credential label followed by a value");
       }
@@ -218,11 +377,17 @@ function scanText(text) {
         if (r) add(r);
         // a label of one, two or three words (password, kata sandi, mot de passe)
         let span = 0;
-        if (labelWord(t)) span = 1;
-        else if (labelWord(t + (tokens[k + 1] || ""))) span = 2;
-        else if (labelWord(t + (tokens[k + 1] || "") + (tokens[k + 2] || "")))
+        if (isGateLabel(t)) span = 1;
+        else if (isGateLabelExact(t + (tokens[k + 1] || ""))) span = 2;
+        else if (
+          isGateLabelExact(t + (tokens[k + 1] || "") + (tokens[k + 2] || ""))
+        )
           span = 3;
-        if (span && !/^\[?redacted/i.test(t)) {
+        if (
+          span &&
+          isGateStrong(tokens.slice(k, k + span).join("")) &&
+          !/^\[?redacted/i.test(t)
+        ) {
           for (const nx of tokens.slice(k + span, k + span + 5)) {
             if (/^\\?\[?redacted/i.test(nx)) break;
             if (valueLike(nx)) {

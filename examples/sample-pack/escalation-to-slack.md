@@ -2,7 +2,7 @@
 
 ## Escalation to Slack
 
-This workflow is called by another workflow. Along the way it uses Slack and SMTP email. It makes decisions at "Route by urgency". If it fails, nothing is notified automatically.
+This workflow is called by another workflow. Along the way it uses Slack and SMTP email. It makes decisions at “Route by urgency”. If it fails, nothing is notified automatically.
 
 | Item | Value |
 | --- | --- |
@@ -35,12 +35,12 @@ flowchart TD
 
 ### Steps
 
-1. Called by agent: Execute Workflow trigger. Next: Route by urgency
-2. Route by urgency: Switch, routes to 2 case(s). Next: Page on-call (urgent), Queue for morning (normal), Log unknown (fallback)
-3. Page on-call: Slack, message / post. Next: Fallback email (error)
-4. Queue for morning: Slack, message / post
-5. Log unknown: No Operation
-6. Fallback email: Send Email (SMTP)
+1. Called by agent (Execute Workflow trigger). Next: Route by urgency
+2. Route by urgency (Switch, routes to 2 case(s)). Next: Page on-call (urgent), Queue for morning (normal), Log unknown (fallback)
+3. Page on-call (Slack, message / post). Next: Fallback email (error)
+4. Queue for morning (Slack, message / post)
+5. Log unknown (No Operation)
+6. Fallback email (Send Email (SMTP))
 
 ### External services
 

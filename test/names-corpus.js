@@ -69,4 +69,6 @@ module.exports = [
   "Support chat agent",
   "Daily 7am Brief",
   "Q3 Sales Forecast",
+  // compound names that only mention a credential word
+  'DB-Password rotation', 'Wi-Fi-Password reminder', 'Master-Passwort Reset', 'Login-PIN reminder', 'API-Key expiry check', 'db_password vault sync', 'SSH key rotation', 'Stripe-Token refresher',
 ];

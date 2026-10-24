@@ -12,6 +12,7 @@ const {
   CJK_LABELS,
   CODE_WORDS,
   EMOJI_LABELS,
+  SUFFIX_LABELS,
   PIN_LABELS,
   SPOKEN_DIGITS,
   NATO,
@@ -315,7 +316,43 @@ function tokenSuspicious(tok, depth = 0, idMode = false) {
 }
 
 /** 'strong' | 'weak' | null: is this whole token a credential word (any supported language)? */
+// split a token into words: DB-Password, db_password, wi.fi.pass, dbPassword, APIKey
+function compoundWords(tok) {
+  const c = String(tok).replace(EDGE, "");
+  return c
+    .replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, "$1 $2")
+    .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2")
+    .split(/[-_.\s]+/u)
+    .filter(Boolean);
+}
+
+/** 'strong' | 'weak' | null: a credential word, alone or inside a compound (DB-Password, db_password, dbPassword). */
 function kwKind(tok) {
+  const whole = kwKindWhole(tok);
+  if (whole === "strong") return whole;
+  const w = compoundWords(tok);
+  let best = whole;
+  for (const word of w) {
+    const lw = fold(word);
+    if (SUFFIX_LABELS.some((lab) => lw.length > lab.length && lw.endsWith(lab))) {
+      const k = kwKindWhole(SUFFIX_LABELS.find((lab) => lw.length > lab.length && lw.endsWith(lab)));
+      if (k === "strong") return k;
+      if (k) best = k;
+    }
+  }
+  if (w.length > 1 && w.length <= 8) {
+    for (let a = 0; a < w.length; a++) {
+      for (let b = a + 1; b <= Math.min(w.length, a + 3); b++) {
+        const k = kwKindWhole(w.slice(a, b).join(""));
+        if (k === "strong") return k;
+        if (k) best = k;
+      }
+    }
+  }
+  return best;
+}
+
+function kwKindWhole(tok) {
   const c = fold(String(tok).replace(EDGE, "")).replace(/[-_\s]/g, "");
   if (!c || cpLen(c) > 24) return null;
   const variants = [c];
@@ -377,12 +414,19 @@ const isCjk = (t) => /[฀-๿぀-ヿ㐀-鿿가-힯]/.test(t);
 const labelKey = (t) =>
   fold(String(t).replace(EDGE, "")).replace(/[-_\s]/g, "");
 function pinLabelSpan(tokens, i) {
-  if (PIN_LABELS.has(labelKey(tokens[i]))) return 1;
-  if (
-    i + 1 < tokens.length &&
-    PIN_LABELS.has(labelKey(tokens[i] + tokens[i + 1]))
-  )
-    return 2;
+  const rawWords = compoundWords(tokens[i]);
+  const words = rawWords.map((w) => labelKey(w));
+  if (words.some((w) => PIN_LABELS.has(w))) return 1;
+  // glued to a prefix: DBPIN (all capitals), DBcvv, rootcvc
+  if (rawWords.some((w) => (/^[A-Z0-9]{4,}$/.test(w) && labelKey(w).endsWith("pin")) || /[a-z0-9](cvv2?|cvc2?)$/i.test(w))) return 1;
+  for (let a = 0; a + 1 < words.length; a++)
+    if (PIN_LABELS.has(words[a] + words[a + 1])) return 1;
+  if (i + 1 < tokens.length) {
+    const next = compoundWords(tokens[i + 1]).map((w) => labelKey(w));
+    if (next.length && PIN_LABELS.has(labelKey(tokens[i]) + next[0])) return 2;
+    if (words.length && PIN_LABELS.has(words[words.length - 1] + next[0]))
+      return 2;
+  }
   return 0;
 }
 const PIN_SKIP = new Set([
@@ -560,6 +604,24 @@ function sanitizeText(input, opts = {}) {
       i += pinSpan - 1;
       continue;
     }
+    if (pinSpan) {
+      // "PIN: tangerine": a code label with an explicit marker takes the next word, whatever it is
+      let jj = i + pinSpan;
+      let exp = /[:=]$/.test(tokens[jj - 1]);
+      for (
+        let steps = 0;
+        jj < n && steps < 3 && CONNECTORS.has(tokens[jj].toLowerCase());
+        steps++
+      ) {
+        if (MARKERS.has(tokens[jj].toLowerCase())) exp = true;
+        jj++;
+      }
+      if (jj < n && !redactedRe.test(tokens[jj]) && (exp || valueLike(tokens[jj]))) {
+        mark[jj] = true;
+        i += pinSpan - 1;
+        continue;
+      }
+    }
     // CJK labels live inside tokens: 密码是蓝天白云88, パスワード:さくら77
     if (isCjk(t)) {
       const lab = CJK_LABELS.find((l) => t.includes(l));
@@ -590,8 +652,8 @@ function sanitizeText(input, opts = {}) {
     }
     if (
       m &&
-      PIN_LABELS.has(labelKey(m[1])) &&
-      (m[3].match(/\p{Nd}/gu) || []).length >= 3
+      pinLabelSpan([m[1]], 0) &&
+      !redactedRe.test(m[3])
     ) {
       partial.set(i, `${m[1]}${m[2]}[redacted]`);
       continue;
@@ -641,12 +703,16 @@ function sanitizeText(input, opts = {}) {
     }
     let explicit = /[:=]$/.test(tokens[end]);
     let j = end + 1;
+    let afterMarker = explicit ? end + 1 : -1;
     for (let steps = 0; j < n && steps < 3; steps++) {
       const low = tokens[j]
         .toLowerCase()
         .replace(/^[^\p{L}:=→\-–—/>]+|[^\p{L}:=→\-–—/>]+$/gu, "");
       if (!CONNECTORS.has(low)) break;
-      if (MARKERS.has(low)) explicit = true;
+      if (MARKERS.has(low)) {
+        explicit = true;
+        afterMarker = j + 1;
+      }
       if (
         noteMode &&
         (low === "-" || low === "/" || low === "–" || low === "—")
@@ -654,6 +720,8 @@ function sanitizeText(input, opts = {}) {
         explicit = true;
       j++;
     }
+    // everything right after an explicit marker is the value ("password: \"my winter pass\"")
+    if (explicit && afterMarker >= 0 && afterMarker < j) j = afterMarker;
     if (
       !explicit &&
       k === "strong" &&
@@ -689,7 +757,10 @@ function sanitizeText(input, opts = {}) {
           if (/^[-/–—]$/.test(tokens[q])) continue;
           mark[q] = true;
         }
-      } else if (valueLike(tokens[j])) {
+      } else if (
+        valueLike(tokens[j]) ||
+        (k === "strong" && /^\p{Nd}{3,12}$/u.test(tokens[j]))
+      ) {
         mark[j] = true;
         if (
           j + 1 < n &&
@@ -698,11 +769,8 @@ function sanitizeText(input, opts = {}) {
           !redactedRe.test(tokens[j + 1])
         )
           mark[j + 1] = true;
-      } else if (
-        explicit &&
-        hasDigitOrSymbol(tokens[j]) &&
-        cpLen(tokens[j]) >= 3
-      ) {
+      } else if (explicit && !redactedRe.test(tokens[j])) {
+        // label + explicit marker + anything: that is an assignment
         mark[j] = true;
       }
     }

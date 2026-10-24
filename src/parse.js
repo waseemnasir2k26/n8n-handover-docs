@@ -461,18 +461,18 @@ function analyzeWorkflow(wf, ctx = {}) {
         !/^=?\s*http:\/\/(localhost|127\.|\[::1\])/i.test(p.url)
       ) {
         warnings.push(
-          `Node "${n.name}" calls a plain http:// URL (not encrypted).`,
+          `Node “${n.name}” calls a plain http:// URL (not encrypted).`,
         );
       }
       const b = obj(obj(obj(p.options).batching).batch);
       if (b.batchSize || b.batchInterval) {
         hasHttpBatching = true;
         caps.push(
-          `"${n.name}": HTTP batching ${N(b.batchSize, "?")} per batch, ${N(b.batchInterval, 0)} ms between batches`,
+          `“${n.name}”: HTTP batching ${N(b.batchSize, "?")} per batch, ${N(b.batchInterval, 0)} ms between batches`,
         );
       }
       const to = obj(p.options).timeout;
-      if (to) caps.push(`"${n.name}": request timeout ${N(to, 0)} ms`);
+      if (to) caps.push(`“${n.name}”: request timeout ${N(to, 0)} ms`);
     }
     if (cls) {
       addService(cls.service, cls.cat, n.name, creds);
@@ -557,7 +557,7 @@ function analyzeWorkflow(wf, ctx = {}) {
       });
       if (auth === "none" && n.short === "webhook")
         warnings.push(
-          `Webhook "${n.name}" has no authentication: anyone who knows the URL can trigger it.`,
+          `Webhook “${n.name}” has no authentication: anyone who knows the URL can trigger it.`,
         );
     }
 
@@ -576,26 +576,26 @@ function analyzeWorkflow(wf, ctx = {}) {
     if (n.short === "splitInBatches") {
       hasLoop = true;
       caps.push(
-        `"${n.name}": processes items in batches of ${N(p.batchSize, "default size")}`,
+        `“${n.name}”: processes items in batches of ${N(p.batchSize, "default size")}`,
       );
     }
     if (n.short === "wait") {
       hasWait = true;
       if (p.amount)
         caps.push(
-          `"${n.name}": waits ${N(p.amount, 0)} ${W(plain(p.unit), "")}`.trim(),
+          `“${n.name}”: waits ${N(p.amount, 0)} ${W(plain(p.unit), "")}`.trim(),
         );
     }
     if (n.short === "limit")
-      caps.push(`"${n.name}": keeps at most ${N(p.maxItems, 1)} item(s)`);
+      caps.push(`“${n.name}”: keeps at most ${N(p.maxItems, 1)} item(s)`);
     if (n.short === "agent") {
       const mi = obj(p.options).maxIterations;
-      caps.push(`"${n.name}": AI agent iteration cap ${N(mi, "default (10)")}`);
+      caps.push(`“${n.name}”: AI agent iteration cap ${N(mi, "default (10)")}`);
     }
     if (typeof p.limit === "number" && n.short !== "limit")
-      caps.push(`"${n.name}": result limit ${N(p.limit, 0)}`);
+      caps.push(`“${n.name}”: result limit ${N(p.limit, 0)}`);
     if (p.returnAll === true)
-      caps.push(`"${n.name}": returns ALL results (no cap)`);
+      caps.push(`“${n.name}”: returns ALL results (no cap)`);
     if (n.short === "code") codeNodes.push(n.name);
 
     // per-node error handling
@@ -812,11 +812,11 @@ function plainSummary(m) {
   const branches = m.nodes.filter((n) => n.kind === "branch" && !n.disabled);
   if (branches.length)
     out.push(
-      `It makes decisions at ${listJoin(branches.map((b) => `"${b.name}"`))}.`,
+      `It makes decisions at ${listJoin(branches.map((b) => `“${b.name}”`))}.`,
     );
   for (const a of m.agents) {
     const bits = a.parts.map((p) => `${p.label}: ${p.names.join(", ")}`);
-    out.push(`"${a.node}" is an AI step wired to ${bits.join("; ")}.`);
+    out.push(`“${a.node}” is an AI step wired to ${bits.join("; ")}.`);
   }
   if (m.subWorkflows.length)
     out.push(`It hands work to ${m.subWorkflows.length} other workflow(s).`);

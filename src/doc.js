@@ -117,7 +117,7 @@ function workflowBlocks(m, opts = {}) {
       .filter((e) => e.from === id && e.type === "main")
       .map((e) => `${byId.get(e.to).name}${e.label ? ` (${e.label})` : ""}`);
     const attach = m.agents.find((a) => a.node === n.name);
-    let line = `${n.name}: ${n.typeLabel}${n.detail ? `, ${n.detail}` : ""}${n.disabled ? " [DISABLED]" : ""}`;
+    let line = `${n.name} (${n.typeLabel}${n.detail ? `, ${n.detail}` : ""}${n.disabled ? ", DISABLED" : ""})`;
     if (attach)
       line += `. Uses ${attach.parts.map((p) => `${p.label}: ${p.names.join(", ")}`).join("; ")}`;
     if (outs.length) line += `. Next: ${outs.join(", ")}`;
@@ -293,7 +293,7 @@ function indexBlocks(items, opts = {}) {
   b.push({
     t: "note",
     kind: "info",
-    text: `Best-effort: read every pack before you send it to a client. ${hidden} sticky note(s) ${includeNotes ? "included, redacted best-effort" : "hidden (use --include-notes to include them; they are then redacted best-effort)"}. ${redacted} name(s) were partly replaced with [redacted] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it. ${opts.gitleaksNote || "independent gitleaks scan: not run"}.`,
+    text: `Best-effort: read every pack before you send it to a client. ${hidden} sticky note(s) ${includeNotes ? "included, redacted best-effort" : "hidden (use --include-notes to include them; they are then redacted best-effort)"}. ${redacted} name(s) were partly replaced with [redacted] because they looked sensitive. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it. ${opts.gitleaksNote || "independent gitleaks scan: not run"}.`,
   });
   const sum = (k) =>
     items.reduce(
@@ -418,7 +418,7 @@ function indexBlocks(items, opts = {}) {
     b.push({ t: "h", l: 2, text: "Needs attention before handover" });
     b.push({
       t: "ul",
-      items: warn.flatMap(({ m }) => m.warnings.map((w) => `${m.name}: ${w}`)),
+      items: warn.flatMap(({ m }) => m.warnings.map((w) => `“${m.name}”: ${w}`)),
     });
   }
   return b;

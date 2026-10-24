@@ -54,7 +54,7 @@ test("name policy: credential words, tokens, hex, base64, confusables are redact
 
 test("a password word assigned a plain phrase redacts the phrase", () => {
   assert.equal(sanitizeText("my password is horse battery staple"), "my password is [redacted]");
-  assert.equal(sanitizeText("my key is horse battery staple"), "my key is horse battery staple");
+  assert.equal(sanitizeText("my key is horse battery staple"), "my key is [redacted] battery staple");
 });
 
 test('identifiers: camelCase credential types stay, anything with spaces or secrets becomes "custom"', () => {

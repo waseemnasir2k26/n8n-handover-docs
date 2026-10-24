@@ -14,21 +14,21 @@ const wfOf = (name) => ({
   connections: {},
 });
 
-test("usefulness corpus: 65 ordinary names, 0 false redactions", () => {
-  assert.equal(names.length, 65);
+test("usefulness corpus: ordinary names, 0 false redactions", () => {
+  assert.ok(names.length >= 73);
   const redacted = names.filter((n) => sanitizeText(n) !== n);
   assert.deepEqual(redacted, []);
 });
 
-test("usefulness: a pack of those names has 65 distinct rows and file names, none called redacted-N", async () => {
+test("usefulness: a pack of those names has one distinct row and file name per name, none called redacted-N", async () => {
   const { files, items } = await generate(names.map(wfOf), {
     date: "2026-01-01",
   });
-  assert.equal(new Set(items.map((i) => i.m.name)).size, 65);
+  assert.equal(new Set(items.map((i) => i.m.name)).size, names.length);
   const mdFiles = Object.keys(files).filter(
     (f) => f.endsWith(".md") && f !== "index.md",
   );
-  assert.equal(mdFiles.length, 65);
+  assert.equal(mdFiles.length, names.length);
   assert.ok(!mdFiles.some((f) => /redacted/.test(f)));
   assert.match(files["index.md"], /0 name\(s\) were partly replaced/);
 });

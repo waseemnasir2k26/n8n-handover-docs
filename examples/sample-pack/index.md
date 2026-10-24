@@ -2,7 +2,7 @@
 
 Generated 2026-10-25. 5 workflow(s). Credential values and IDs are never copied into this pack.
 
-> **Note:** Best-effort: read every pack before you send it to a client. 1 sticky note(s) hidden (use --include-notes to include them; they are then redacted best-effort). 1 name(s) were partly replaced with \[redacted\] because they looked like they might contain a secret. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it. independent gitleaks scan: run, no findings.
+> **Note:** Best-effort: read every pack before you send it to a client. 1 sticky note(s) hidden (use --include-notes to include them; they are then redacted best-effort). 1 name(s) were partly replaced with \[redacted\] because they looked sensitive. This pack is best-effort: it was scanned by an independent detector before writing, but read it before you send it. independent gitleaks scan: run, no findings.
 
 ## What was redacted or hidden
 
@@ -55,7 +55,7 @@ Generated 2026-10-25. 5 workflow(s). Credential values and IDs are never copied 
 
 ## Needs attention before handover
 
-- Support chat agent: Webhook "Chat webhook" has no authentication: anyone who knows the URL can trigger it.
-- Support chat agent: Pinned (frozen) test data exists on 1 node(s): Chat webhook. Pinned data replaces live output during manual test runs and can contain real customer data. Unpin before sharing the export.
-- Support chat agent: 1 possible hard-coded secret(s) found inside node parameters (listed by location, values masked). Move them to credentials or environment variables.
-- Support chat agent: 1 disabled node(s) are part of this workflow and are excluded from the service list.
+- “Support chat agent”: Webhook “Chat webhook” has no authentication: anyone who knows the URL can trigger it.
+- “Support chat agent”: Pinned (frozen) test data exists on 1 node(s): Chat webhook. Pinned data replaces live output during manual test runs and can contain real customer data. Unpin before sharing the export.
+- “Support chat agent”: 1 possible hard-coded secret(s) found inside node parameters (listed by location, values masked). Move them to credentials or environment variables.
+- “Support chat agent”: 1 disabled node(s) are part of this workflow and are excluded from the service list.

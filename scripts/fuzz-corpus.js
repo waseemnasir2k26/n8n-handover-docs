@@ -320,6 +320,7 @@ const EXTRA_FIELDS = ["sticky", "nodename", "wfname", "tag", "credname"];
 // Cases the final gate must catch even if the scrubber were bypassed: text injected into the finished
 // files after rendering (index.md, a workflow .md, index.html, inventory.csv).
 const INJECT = [
+  "DB-Password: " + "Winter" + "25x", "db_password: " + "Winter" + "25x", "Master-Passwort: " + "Blau7" + "Haus", "Wi-Fi-Password: " + "Winter" + "25x", "root-password " + "Winter" + "25x", "Login-PIN: 4821", "pwd=" + "tange" + "rine", "API_TOKEN=abc", "mot de passe : " + "tange" + "rine", "пароль: " + "tange" + "rine", "password: " + "tange" + "rine", "Zugangscode: " + "Blau7" + "Haus", "cvv 123", "sort code 12-34-56", "account number 12345678", "DBpwd: " + "Blau7" + "Haus", "myPIN=" + "Blau7" + "Haus",
   "password: " + "Winter" + "2026!!",
   "pw is " + "Winter" + "2026!!",
   "api_key=" + "Zq8wRt5Yu3Kp9mX2",
@@ -364,6 +365,7 @@ function tokensOf(s) {
 }
 
 function* cases() {
+  yield* compoundCases();
   for (const [g, arr] of Object.entries(SECRETS)) {
     for (const s of arr) {
       for (const [f, fn] of Object.entries(FIELDS)) {
@@ -482,4 +484,38 @@ function* cases() {
   };
 }
 
-module.exports = { cases, SECRETS, FIELDS, EXTRA, INJECT };
+// Compound labels: prefix words x label words x joiners x separators x values, in names, tags and credential names.
+// (DB-Password: x, db_password: x, DBPassword = x, Wi-Fi-Password x, Login-PIN: 4821 ...) Every Nth combination.
+const C_PREFIX = ['DB', 'Master', 'Wi-Fi', 'root', 'Login', 'Admin', 'SSH', 'Stripe', 'my'];
+const C_LABELS = [['Password', 'strong'], ['Passwort', 'strong'], ['pwd', 'strong'], ['PIN', 'pin'], ['Secret', 'strong'], ['Token', 'weak'], ['Kennwort', 'strong'], ['Zugangscode', 'strong'], ['cvv', 'pin'], ['API_KEY', 'strong']];
+const C_JOIN = ['-', '_', '.', ''];
+const C_SEP = [': ', ' = ', '=', ' ', ' is '];
+const C_VALUES = [['Winter' + '25x', 'mixed'], ['Blau7' + 'Haus', 'mixed'], ['4821', 'num'], ['tange' + 'rine', 'plain']];
+const C_FIELDS = ['nodename', 'wfname', 'tag', 'credname'];
+const C_STRIDE = 7;
+
+function compoundNames() {
+  const out = [];
+  let k = 0;
+  for (const p of C_PREFIX) for (const [lab, kind] of C_LABELS) for (const j of C_JOIN) for (const sep of C_SEP) for (const [val, vk] of C_VALUES) {
+    const marked = /[:=]|is/.test(sep);
+    // juxtaposed values must be something a person would recognise as a value; plain words and bare numbers need a marker
+    if (!marked && (vk === 'plain' || (vk === 'num' && kind === 'weak'))) continue;
+    if (k++ % C_STRIDE !== 0) continue;
+    out.push({ text: `${p}${j}${lab}${sep}${val}`, val });
+  }
+  return out;
+}
+
+function* compoundCases() {
+  const items = compoundNames();
+  for (let i = 0; i < items.length; i++) {
+    const { text, val } = items[i];
+    const f = C_FIELDS[i % C_FIELDS.length];
+    const wf = BASE();
+    FIELDS[f](wf, text);
+    yield { id: `compound:${f}/${text.slice(0, 40)}`, group: 'compound', field: f, wf, tokens: [val], sticky: false };
+  }
+}
+
+module.exports = { cases, compoundCases, compoundNames, SECRETS, FIELDS, EXTRA, INJECT };

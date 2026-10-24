@@ -2,7 +2,7 @@
 
 ## Lead alerts (daily)
 
-This workflow runs on a schedule: every 1 day(s) at 08:00 (timezone Asia/Makassar). Along the way it uses HTTP API (custom endpoint), Gmail and Google Sheets. It makes decisions at "Is it a hot lead?". When it fails, an error workflow is notified.
+This workflow runs on a schedule: every 1 day(s) at 08:00 (timezone Asia/Makassar). Along the way it uses HTTP API (custom endpoint), Gmail and Google Sheets. It makes decisions at “Is it a hot lead?”. When it fails, an error workflow is notified.
 
 | Item | Value |
 | --- | --- |
@@ -33,11 +33,11 @@ flowchart TD
 
 ### Steps
 
-1. Every morning: Schedule trigger. Next: Fetch new leads
-2. Fetch new leads: HTTP Request, GET a custom endpoint (host hidden). Next: Is it a hot lead?
-3. Is it a hot lead?: IF, checks 1 condition(s). Next: Email the owner (true), Add to nurture sheet (false)
-4. Email the owner: Gmail, message / send
-5. Add to nurture sheet: Google Sheets, sheet / append
+1. Every morning (Schedule trigger). Next: Fetch new leads
+2. Fetch new leads (HTTP Request, GET a custom endpoint (host hidden)). Next: Is it a hot lead?
+3. Is it a hot lead? (IF, checks 1 condition(s)). Next: Email the owner (true), Add to nurture sheet (false)
+4. Email the owner (Gmail, message / send)
+5. Add to nurture sheet (Google Sheets, sheet / append)
 
 ### External services
 
@@ -72,7 +72,7 @@ None.
 
 ### Rate limits and caps
 
-- "Fetch new leads": request timeout 15000 ms
+- “Fetch new leads”: request timeout 15000 ms
 
 ### Sub-workflows called
 

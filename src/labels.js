@@ -53,8 +53,8 @@ const BY_LANG = {
     weak: ["jeton", "clé", "cle"],
   },
   German: {
-    strong: ["passwort", "kennwort", "geheimnis", "losungswort"],
-    weak: ["schlüssel", "schluessel"],
+    strong: ["passwort", "kennwort", "geheimnis", "losungswort", "zugangscode"],
+    weak: ["schlüssel", "schluessel", "zugangsdaten"],
   },
   Turkish: { strong: ["şifre", "sifre", "parola"], weak: ["anahtar"] },
   Indonesian: { strong: ["katasandi", "sandi", "rahasia"], weak: ["kunci"] },
@@ -110,6 +110,14 @@ const PIN_LABELS = [
   "verifycode",
   "unlockcode",
   "entrycode",
+  "cvv",
+  "cvv2",
+  "cvc",
+  "cvc2",
+  "sortcode",
+  "accountnumber",
+  "accountno",
+  "zugangscode",
 ];
 const SPOKEN_DIGITS = [
   "zero",
@@ -178,7 +186,11 @@ const CODE_WORDS = [
 
 const all = (k) => Object.values(BY_LANG).flatMap((l) => l[k] || []);
 
+// A label glued to a prefix with no separator (DBpwd, rootpassword, mytoken, DBPIN). Long, unambiguous words only.
+const SUFFIX_LABELS = ['password', 'passwd', 'passwort', 'kennwort', 'passphrase', 'passcode', 'secret', 'secreto', 'segredo', 'token', 'pwd', 'cvv', 'cvc', 'zugangscode', 'contrasena', 'motdepasse', 'apikey', 'authtoken', 'credentials', 'credential'];
+
 module.exports = {
+  SUFFIX_LABELS,
   BY_LANG,
   LANGUAGES: Object.keys(BY_LANG),
   STRONG: new Set(all("strong").map(norm)),

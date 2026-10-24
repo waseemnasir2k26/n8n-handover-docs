@@ -47,17 +47,23 @@ function mdCode(v) {
 function slugify(name, taken, seed) {
   const raw = String(name == null ? '' : name);
   const redacted = /redacted/i.test(raw);
+  // accents are transliterated (zurücksetzen -> zurucksetzen); other scripts have no safe words
   const words = raw
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
     .toLowerCase()
     .replace(/redacted/g, ' ')
     .split(/[^a-z0-9]+/)
     .filter((w) => w && (/^[a-z]+$/.test(w) || /^\d{1,4}$/.test(w) || (w.length <= 4 && /^[a-z0-9]+$/.test(w))));
-  let base = words.join('-').slice(0, 60).replace(/-+$/g, '') || 'workflow';
-  const h = require('node:crypto').createHash('sha256').update(String(seed == null ? raw : seed)).digest('hex').slice(0, 6);
-  let s = redacted ? `${base}-${h}` : base;
-  if (taken.has(s) || s === 'index') s = `${base}-${h}`;
+  const base = words.join('-').slice(0, 60).replace(/-+$/g, '') || 'workflow';
+  // "h" + 6 hex digits: a fixed, recognisable shape (the final gate allowlists it)
+  const h = 'h' + require('node:crypto').createHash('sha256').update(String(seed == null ? raw : seed)).digest('hex').slice(0, 6);
+  const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|index)$/;
+  let s = redacted || !words.length ? `${base}-${h}` : base;
+  if (RESERVED.test(s)) s = `${s}-wf`;
+  if (taken.has(s)) s = `${base}-${h}`;
   let i = 2;
-  while (taken.has(s) || s === 'index') s = `${base}-${h}-${i++}`;
+  while (taken.has(s) || RESERVED.test(s)) s = `${base}-${h}-${i++}`;
   taken.add(s);
   return s;
 }

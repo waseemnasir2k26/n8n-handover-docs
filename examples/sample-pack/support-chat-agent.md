@@ -2,7 +2,7 @@
 
 ## Support chat agent
 
-This workflow receives an HTTP request (webhook). Along the way it uses OpenAI and Stripe. "Support agent" is an AI step wired to model: OpenAI Chat Model; memory: Window memory; tool: Look up order, Escalate to human. It hands work to 1 other workflow(s). If it fails, nothing is notified automatically.
+This workflow receives an HTTP request (webhook). Along the way it uses OpenAI and Stripe. “Support agent” is an AI step wired to model: OpenAI Chat Model; memory: Window memory; tool: Look up order, Escalate to human. It hands work to 1 other workflow(s). If it fails, nothing is notified automatically.
 
 | Item | Value |
 | --- | --- |
@@ -38,9 +38,9 @@ flowchart TD
 
 ### Steps
 
-1. Chat webhook: Webhook. Next: Support agent
-2. Support agent: AI Agent. Uses model: OpenAI Chat Model; memory: Window memory; tool: Look up order, Escalate to human
-3. Check Slack token: Code, runs custom JavaScript code \[DISABLED\]
+1. Chat webhook (Webhook). Next: Support agent
+2. Support agent (AI Agent). Uses model: OpenAI Chat Model; memory: Window memory; tool: Look up order, Escalate to human
+3. Check Slack token (Code, runs custom JavaScript code, DISABLED)
 
 ### External services
 
@@ -79,7 +79,7 @@ None.
 
 ### Rate limits and caps
 
-- "Support agent": AI agent iteration cap 6
+- “Support agent”: AI agent iteration cap 6
 
 ### Sub-workflows called
 
@@ -87,7 +87,7 @@ None.
 
 ### Warnings
 
-- Webhook "Chat webhook" has no authentication: anyone who knows the URL can trigger it.
+- Webhook “Chat webhook” has no authentication: anyone who knows the URL can trigger it.
 - Pinned (frozen) test data exists on 1 node(s): Chat webhook. Pinned data replaces live output during manual test runs and can contain real customer data. Unpin before sharing the export.
 - 1 possible hard-coded secret(s) found inside node parameters (listed by location, values masked). Move them to credentials or environment variables.
 - 1 disabled node(s) are part of this workflow and are excluded from the service list.
@@ -109,7 +109,6 @@ None.
 | Stripe | 429 / rate limited | Plan limit or per-minute limit reached | Node(s): Look up order. Check provider usage page; add Wait or batching |
 | Stripe | Schema change | Field renamed, ID deleted, or API version retired | Node(s): Look up order. Open the failing node, run it with the last input, read the error body |
 | Webhook trigger | Webhook not reached or returns 404 | Workflow inactive, or the sender uses the test URL instead of the production URL, or the path changed | Node(s): Chat webhook. Check Active toggle and the method and path shown in this document (path shortened unless --show-webhook-paths) |
-| Webhook trigger | Anyone who knows the URL can trigger it | Webhook has no authentication configured | Node(s): Chat webhook. Add header or basic auth on the Webhook node, or validate a shared secret in the first node |
 | Sub-workflows | Sub-workflow call fails | The called workflow is inactive, renamed, deleted, or expects different input fields. Its error shows as a failure of the caller | Node(s): Escalate to human. Open the called workflow and its latest execution; compare input fields |
 | AI agent | AI agent loops, stalls or returns nonsense | Iteration cap reached, a tool errored, or the model passed bad arguments to a tool | Node(s): Support agent. Open the failed execution and read the agent step-by-step log; check each tool node separately |
 

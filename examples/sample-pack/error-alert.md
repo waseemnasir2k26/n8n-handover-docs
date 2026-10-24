@@ -27,8 +27,8 @@ flowchart TD
 
 ### Steps
 
-1. On any failure: Error trigger. Next: Tell the team
-2. Tell the team: Telegram
+1. On any failure (Error trigger). Next: Tell the team
+2. Tell the team (Telegram)
 
 ### External services
 
