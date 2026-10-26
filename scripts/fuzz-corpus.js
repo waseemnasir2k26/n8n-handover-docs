@@ -256,6 +256,9 @@ const EXTRA = {
   shortval: ["password: abc12", "abc12"],
   quoted_space: ['password: "my winter pass"', "winter pass"],
   pw_space: ["password: Winter 2026!!", "2026!!"],
+  dash_strong: ["Secret - tangerine", "tangerine"],
+  colon_weak_one: ["Token: Zebra", "Zebra"],
+  access_token_one: ["Access Token: zebra", "zebra"],
   passw_is: ["The password for the CRM is Winter2026!!", "Winter2026!!"],
   login: ["Login: bob@x.com / Winter2026!!", "Winter2026!!"],
   b64key: [

@@ -23,6 +23,8 @@ const {
 } = require("./labels");
 const {
   isLabelledValue,
+  labelledValue,
+  nextToken,
   separatorAt,
   separatorKind,
   phraseKindOf,
@@ -162,31 +164,8 @@ function decodeLine(raw) {
 
 // ---- labels inside compounds (DB-Password, db_password, dbPassword, Login-PIN) ----
 const GATE_LABELS = new Set([...LABEL_SET, ...PIN_LABELS]);
-// A name after a credential label and a DASH: "Credentials - Slack." or a table cell "<td>Credentials - Slack</td>". A run of
-// plain-letter words (<= 20 letters each) that ends at a sentence mark, quote, comma or markup boundary is prose, not a value.
-// Any digit or symbol makes it a value. Colon and "=" values are never exempt: "password: tangerine" stays blocked.
+// dash markers: the dash rule itself lives in src/value-rule.js (labelledValue)
 const DASH_MARKS = new Set(["-", "–", "—"]);
-const PLAIN_WORD = /^\p{L}{1,20}$/u;
-const FIELD_END = /["'`,;|<>()[\]{}“”‘’]/u;
-// the word up to the first field/markup mark, and whether the run ends there (quote, comma, bracket, sentence mark)
-function plainPiece(t) {
-  const c = t.replace(/^["'`([“‘]+/u, "");
-  const cut = c.search(FIELD_END);
-  const piece = cut >= 0 ? c.slice(0, cut) : c;
-  const ends = cut >= 0 || /[.:!?…]$/u.test(piece);
-  return { word: piece.replace(/[.,;:!?…]+$/u, ""), ends };
-}
-function plainRun(toks, start, breaks = new Set()) {
-  if (start >= toks.length) return false;
-  for (let j = start; j < toks.length; j++) {
-    if (j > start && breaks.has(j)) return true; // a table cell or tag ended the value
-    const { word, ends } = plainPiece(toks[j]);
-    if (word === "" && ends && j > start) return true; // a bare quote or comma closes the run
-    if (!PLAIN_WORD.test(word)) return false;
-    if (ends) return true;
-  }
-  return true;
-}
 const MARK_TOKENS = new Set([
   ":",
   "=",
@@ -350,12 +329,11 @@ function labelValuePass(line, add) {
     }
     while (marked && p < toks.length && MARK_TOKENS.has(toks[p].toLowerCase()))
       markToks.push(toks[p++]);
-    // only a dash (never a colon or "=") makes a plain-letter run a name: "Credentials - Slack" is prose,
-    // "Credentials: Slack" and "password: tangerine" stay values
-    const dashOnly =
-      !/[:=]$/.test(toks[i + span - 1]) &&
-      markToks.length > 0 &&
-      markToks.every((t) => DASH_MARKS.has(t));
+    // the separator this marker is: ":" / "=" / "-" (a dash), or null for is, ->, ...
+    const markSep =
+      [toks[i + span - 1], ...markToks]
+        .map((t) => (/[:=]$/.test(t) ? t.slice(-1) : DASH_MARKS.has(t) ? "-" : null))
+        .find(Boolean) || null;
     if (!marked) {
       // "the password for the CRM is X": a marker word a few words later
       if (isGateStrong(toks.slice(i, i + span).join("")))
@@ -369,9 +347,9 @@ function labelValuePass(line, add) {
     const kind = labelKind(toks.slice(i, i + span).join(""));
     const val =
       p < toks.length ? toks[p].replace(/^["'`]+|["'`,;]+$/g, "") : "";
-    if (marked && nonEmptyValue(val) && isLabelledValue(kind, val)) {
-      // ordinary names ("Credentials - Slack.", "Password - Reset Flow") are not values
-      if (dashOnly && plainRun(toks, p, breaks)) continue;
+    const next = nextToken(toks, p + 1, breaks);
+    // ordinary names ("Credentials - Slack", "Token: refresh job") are not values (src/value-rule.js)
+    if (marked && nonEmptyValue(val) && labelledValue(kind, markSep, val, next)) {
       add("credential label followed by an assigned value");
     }
   }
@@ -385,15 +363,18 @@ const labelWord = (t) => {
 // a label phrase (up to three words) before ":" or "=" and the value after it (src/value-rule.js)
 function separatorPass(line, add) {
   const toks = [];
-  line.split(/<[^>]*>/).forEach((seg) =>
-    toks.push(...seg.replace(/\|/g, " ").split(/\s+/).filter(Boolean)),
-  );
+  const breaks = new Set();
+  line.split(/<[^>]*>/).forEach((seg) => {
+    const ws = seg.replace(/\|/g, " ").split(/\s+/).filter(Boolean);
+    if (ws.length && toks.length) breaks.add(toks.length);
+    toks.push(...ws);
+  });
   for (let i = 0; i < toks.length; i++) {
-    const sep = separatorAt(toks, i);
+    const sep = separatorAt(toks, i, breaks);
     if (!sep || sep.value === null) continue;
     const kind = separatorKind(sep.sep, phraseKindOf(sep.words, labelKind));
     const v = sep.value.replace(/^["'`]+|["'`,;]+$/g, "");
-    if (kind && nonEmptyValue(v) && isLabelledValue(kind, v))
+    if (kind && nonEmptyValue(v) && labelledValue(kind, sep.sep, v, sep.next))
       add("credential label phrase followed by an assigned value");
   }
 }

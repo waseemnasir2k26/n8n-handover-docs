@@ -21,6 +21,7 @@ const {
 } = require("./labels");
 const {
   isLabelledValue,
+  labelledValue,
   separatorAt,
   separatorKind,
   phraseKindOf,
@@ -522,7 +523,7 @@ function sanitizeText(input, opts = {}) {
     const sep = separatorAt(tokens, i);
     if (!sep || sep.value === null || redactedRe.test(sep.value)) continue;
     const kind = separatorKind(sep.sep, phraseKindOf(sep.words, policyWordKind));
-    if (!kind || !isLabelledValue(kind, sep.value)) continue;
+    if (!kind || !labelledValue(kind, sep.sep, sep.value, sep.next)) continue;
     if (sep.attached) partial.set(i, `${sep.base}${sep.sep}[redacted]`);
     else mark[sep.valueIdx] = true;
   }

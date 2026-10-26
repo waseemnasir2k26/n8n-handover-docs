@@ -13,15 +13,15 @@ test("strong labels: label + separator + any token is the value, in the policy a
   }
 });
 
-test("weak labels: plain-letter names are unchanged and exit clean, in the policy and the gate", () => {
-  for (const t of ["Credentials: Slack", "Token: refresh job", "API Key: Rotation", "Auth: Callback", "Login: Alerts"]) {
+test("weak labels: two or more plain words after a colon are a name, in the policy and the gate", () => {
+  for (const t of ["Credentials: Google Sheets", "Token: refresh job", "Access Token: refresh job"]) {
     assert.equal(sanitizeText(t), t, t);
     assert.deepEqual(scanText(t), [], t);
   }
 });
 
-test("weak labels: a value-looking token is redacted in the policy and flagged by the gate", () => {
-  for (const t of ["Token: ghp_abc123XYZ", "API Key: sk-live-abc123"]) {
+test("weak labels: ONE plain word that ends the name is the value, in the policy and the gate", () => {
+  for (const t of ["Token: Zebra", "Access Token: zebra", "API Key: Rotation", "Auth: Callback", "Login: Alerts", "Token: ghp_abc123XYZ", "API Key: sk-live-abc123"]) {
     assert.match(sanitizeText(t), /\[redacted\]/, t);
     assert.ok(scanText(t).length > 0, t);
   }
@@ -56,17 +56,36 @@ test("= is an assignment: a weak or strong label, = and any token is the value; 
     assert.match(sanitizeText(t), /\[redacted\]/, t);
     assert.ok(scanText(t).length > 0, t);
   }
-  assert.equal(sanitizeText("Credentials: Slack"), "Credentials: Slack");
+  assert.equal(sanitizeText("Credentials: Slack"), "Credentials: [redacted]");
   assert.equal(sanitizeText("Token: refresh job"), "Token: refresh job");
   assert.match(sanitizeText("password: tangerine"), /\[redacted\]/);
 });
 
-test("a dash is not a separator: plain words after a dash are a name, a value-looking token is redacted", () => {
-  for (const t of ["Password - Reset Flow", "Credentials - Slack", "Secret Key - Rotation"]) {
+test("dash rule: strong + dash + ONE token at the end redacts; two or more plain words are a name", () => {
+  for (const t of ["Secret - tangerine", "Password - hunter2", "Secret Key - Rotation", "Password - Winter25x"]) {
+    assert.match(sanitizeText(t), /\[redacted\]/, t);
+    assert.ok(scanText(t).length > 0, t);
+  }
+  for (const t of ["Password - Reset Flow", "Secret - Vault Backup"]) {
     assert.equal(sanitizeText(t), t, t);
     assert.deepEqual(scanText(t), [], t);
   }
-  assert.match(sanitizeText("Password - Winter25x"), /\[redacted\]/);
+});
+
+test("dash rule: weak + dash + any plain words is a name; a value-looking token is redacted", () => {
+  for (const t of ["Credentials - Slack", "Token - Usage Report", "API Key - Rotation", "Login - Alerts"]) {
+    assert.equal(sanitizeText(t), t, t);
+    assert.deepEqual(scanText(t), [], t);
+  }
+  assert.match(sanitizeText("Token - ghp_abc123XYZ"), /\[redacted\]/);
+});
+
+test("phrase allow-list: Secret Santa, Key Accounts, PIN Code Generator are never labels", () => {
+  for (const t of ["Secret Santa: Alice Smith", "Key Accounts: Alice", "Key Results: Q3 Growth", "PIN Code Generator - Sheet", "Secret Sauce - Recipe"]) {
+    assert.equal(sanitizeText(t), t, t);
+    assert.deepEqual(scanText(t), [], t);
+  }
+  assert.match(sanitizeText("Secret Santa Password: tangerine"), /\[redacted\]/);
 });
 
 test("Pin: Board Meeting is over-redacted by design (a strong label with a colon takes the next word)", () => {

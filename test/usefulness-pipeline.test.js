@@ -1,7 +1,8 @@
 "use strict";
 // Whole-pipeline usefulness test: the CLI (policy -> render -> final gate -> write) over ordinary
 // must exit 0 and not change any name. Dash forms ("Label - Thing") and colon forms with WEAK labels
-// ("Credentials: Slack", "Token: refresh job") are ordinary names; the strong/weak rule is in README limits.
+// ("Credentials: Google Sheets", "Token: refresh job") are ordinary names; a single plain word after a weak
+// colon is a value ("Token: Zebra", see test/value-rule.test.js). The rule is in README limits.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const cp = require("node:child_process");
@@ -13,14 +14,14 @@ const { sanitizeText } = require("../src/policy");
 const BIN = path.join(__dirname, "..", "bin", "n8n-handover-docs.js");
 
 const NAMES = [
-  "Credentials: Slack",
   "Credentials: Google Sheets",
+  "Credentials: Slack Alerts",
   "Token: refresh job",
-  "API Key: Rotation",
-  "Auth: Callback",
-  "Login: Alerts",
-  "Key: Rotation",
-  "Access: Granted",
+  "API Key: Customer Rotation",
+  "Auth: Google Callback",
+  "Login: Daily Alerts",
+  "Key Accounts: Alice",
+  "Secret Santa: Alice Smith",
   "Credentials - Slack",
   "Credentials - Google Sheets",
   "Credentials - Gmail Drafts",
@@ -55,7 +56,7 @@ const NAMES = [
   "Auth - Google Login",
   "Auth - Webhook Relay",
   "Auth - Refresh Sync",
-  "PIN - Generator",
+  "PIN Code Generator - Sheet",
   "PIN - Pad Lock Sorter",
   "Login - Alerts",
   "Login - Reminder Emails",
@@ -132,11 +133,11 @@ test("final gate: plain-letter names after a dash or a WEAK label are names; str
     "Credentials - Google Sheets",
     "<td>Credentials - Slack</td><td>unknown</td>",
     '"Credentials - Slack","",""',
-    "Credentials: Slack",
+    "Credentials: Google Sheets",
     "Token: refresh job",
-    "API Key: Rotation",
-    "Auth: Callback",
-    "Login: Alerts",
+    "API Key: Customer Rotation",
+    "Auth: Google Callback",
+    "Login: Daily Alerts",
   ])
     assert.deepEqual(scanText(ok), [], ok);
   for (const bad of [
@@ -147,6 +148,9 @@ test("final gate: plain-letter names after a dash or a WEAK label are names; str
     "Credentials: Slack2024!",
     "Token: ghp_abc123XYZ",
     "API Key: sk-live-abc123",
+    "Token: Zebra",
+    "Access Token: zebra",
+    "Secret - tangerine",
   ])
     assert.ok(scanText(bad).length > 0, bad);
 });
