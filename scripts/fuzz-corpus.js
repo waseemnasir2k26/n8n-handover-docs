@@ -315,6 +315,21 @@ Object.assign(EXTRA, {
   lang_id: ["kata sandi: Musim2026x", "Musim2026x"],
   lang_ur: ["پاسورڈ: گرمی99", "گرمی99"],
 });
+// round 8: accents and confusables before label matching, label phrases (up to three words before the
+// separator), "=" as an assignment, and an ordinary word after a strong label (over-redaction is the safe direction)
+Object.assign(EXTRA, {
+  acc_passwort: ["Passwörd: tangerine", "tangerine"],
+  acc_pasz: ["Pásswórd: tangerine", "tangerine"],
+  acc_secret: ["Sécret: x1y2", "x1y2"],
+  phrase_secret_key: ["Secret Key: tangerine", "tangerine"],
+  phrase_admin: ["Admin Password: tangerine", "tangerine"],
+  phrase_door_pin: ["Door PIN: 4821", "4821"],
+  phrase_wifi: ["Wifi pass: tangerine", "tangerine"],
+  phrase_attached: ["Secret Key:tangerine", "tangerine"],
+  eq_api_key: ["api key = tangerine", "tangerine"],
+  eq_token: ["token=tangerine", "tangerine"],
+  pin_board: ["Pin: Board Meeting", "Board"],
+});
 const EXTRA_FIELDS = ["sticky", "nodename", "wfname", "tag", "credname"];
 
 // Cases the final gate must catch even if the scrubber were bypassed: text injected into the finished
@@ -356,6 +371,15 @@ const INJECT = [
   "mot de passe: Ete2026xy",
   "senha: Verao2026x",
   "kata sandi: Musim2026x",
+  "Passwörd: tangerine",
+  "Sécret: x1y2",
+  "Secret Key: tangerine",
+  "Admin Password: tangerine",
+  "Door PIN: 4821",
+  "Wifi pass: tangerine",
+  "api key = tangerine",
+  "token=tangerine",
+  "Pin: Board Meeting",
 ];
 
 function tokensOf(s) {

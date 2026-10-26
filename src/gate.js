@@ -21,7 +21,12 @@ const {
   NATO,
   inLabelSet,
 } = require("./labels");
-const { isLabelledValue } = require("./value-rule");
+const {
+  isLabelledValue,
+  separatorAt,
+  separatorKind,
+  phraseKindOf,
+} = require("./value-rule");
 
 const LABEL_SET = new Set(ALL_LABELS);
 const SPLIT = /[\s"'<>()[\]{},;|=:\\：]+/;
@@ -308,7 +313,7 @@ function labelValuePass(line, add) {
     const m = /^["'`(\[]*([^:=\s"'`]{1,48})["'`]?([:=])["'`]?(.*)$/u.exec(t);
     if (m && isGateLabel(m[1])) {
       const v = m[3].replace(/^["'`]+|["'`,;]+$/g, "");
-      const kind = labelKind(m[1]);
+      const kind = separatorKind(m[2], labelKind(m[1]));
       if (nonEmptyValue(v) && isLabelledValue(kind, v)) {
         add("credential label with an attached value");
         continue;
@@ -377,6 +382,22 @@ const labelWord = (t) => {
   return LABEL_SET.has(w) || LABEL_SET.has(w.replace(/[-_\s]/g, ""));
 };
 
+// a label phrase (up to three words) before ":" or "=" and the value after it (src/value-rule.js)
+function separatorPass(line, add) {
+  const toks = [];
+  line.split(/<[^>]*>/).forEach((seg) =>
+    toks.push(...seg.replace(/\|/g, " ").split(/\s+/).filter(Boolean)),
+  );
+  for (let i = 0; i < toks.length; i++) {
+    const sep = separatorAt(toks, i);
+    if (!sep || sep.value === null) continue;
+    const kind = separatorKind(sep.sep, phraseKindOf(sep.words, labelKind));
+    const v = sep.value.replace(/^["'`]+|["'`,;]+$/g, "");
+    if (kind && nonEmptyValue(v) && isLabelledValue(kind, v))
+      add("credential label phrase followed by an assigned value");
+  }
+}
+
 /** Scan one text. Returns [{line, kind}] */
 function scanText(text) {
   const hits = [];
@@ -393,6 +414,7 @@ function scanText(text) {
         }
       };
       labelValuePass(line, add);
+      separatorPass(line, add);
       // CJK / Hangul / Kana labels inside tokens: 密码是蓝天白云88, パスワード:さくら77
       for (const lab of CJK_LABELS) {
         const at = line.indexOf(lab);

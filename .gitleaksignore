@@ -1,0 +1,5 @@
+# Synthetic test fixtures only (ghp_abc123XYZ, sk-live-abc123), not real secrets. Fingerprints from gitleaks detect at commit 89e53c1.
+89e53c183aeabdc580bf589dc6b6b3325d5fa0cb:README.md:generic-api-key:105
+89e53c183aeabdc580bf589dc6b6b3325d5fa0cb:test/usefulness-pipeline.test.js:generic-api-key:148
+89e53c183aeabdc580bf589dc6b6b3325d5fa0cb:test/usefulness-pipeline.test.js:generic-api-key:149
+89e53c183aeabdc580bf589dc6b6b3325d5fa0cb:test/value-rule.test.js:generic-api-key:24

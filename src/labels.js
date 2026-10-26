@@ -4,6 +4,9 @@
 // LANGUAGES (npm run readme:langs). Multi-word labels are listed joined; the matcher joins up to
 // three adjacent tokens. strong = a password-type word (a value follows), weak = only a
 // value-looking token after it counts, cjk = matched as a substring (scripts without spaces).
+const { fold } = require("./value-rule");
+// Label sets are folded with the same fold() as the tokens they are matched against (diacritics, marks,
+// look-alike letters). CJK labels stay NFKC-only: they are matched as raw substrings.
 const norm = (s) => s.normalize("NFKC").toLowerCase();
 
 const BY_LANG = {
@@ -213,7 +216,7 @@ const SUFFIX_LABELS = [
 // Label variants: "password1", "pass2", "pin2", "apikey2" match their label (trailing digits or
 // underscores dropped), and "passwords" matches "password" (plural s dropped). The bare word is tried first.
 function labelVariants(w) {
-  const l = String(w).toLowerCase().normalize("NFKC");
+  const l = fold(w);
   const base = l.replace(/[\p{N}_]+$/u, "");
   return [l, base, base.replace(/s$/, "")];
 }
@@ -225,13 +228,13 @@ module.exports = {
   SUFFIX_LABELS,
   BY_LANG,
   LANGUAGES: Object.keys(BY_LANG),
-  STRONG: new Set(all("strong").map(norm)),
-  WEAK: new Set(all("weak").map(norm)),
+  STRONG: new Set(all("strong").map(fold)),
+  WEAK: new Set(all("weak").map(fold)),
   CJK_LABELS: all("cjk").map(norm),
-  CODE_WORDS: new Set(CODE_WORDS.map(norm)),
-  ALL_LABELS: [...all("strong"), ...all("weak")].map(norm),
+  CODE_WORDS: new Set(CODE_WORDS.map(fold)),
+  ALL_LABELS: [...all("strong"), ...all("weak")].map(fold),
   EMOJI_LABELS,
-  PIN_LABELS: new Set(PIN_LABELS),
+  PIN_LABELS: new Set(PIN_LABELS.map(fold)),
   SPOKEN_DIGITS: new Set(SPOKEN_DIGITS),
   NATO: new Set(NATO),
 };

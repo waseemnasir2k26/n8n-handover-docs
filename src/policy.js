@@ -19,7 +19,13 @@ const {
   inLabelSet,
   labelVariants,
 } = require("./labels");
-const { isLabelledValue } = require("./value-rule");
+const {
+  isLabelledValue,
+  separatorAt,
+  separatorKind,
+  phraseKindOf,
+  fold,
+} = require("./value-rule");
 
 const CONNECTORS = new Set([
   ":",
@@ -61,67 +67,6 @@ const MARKERS = new Set([
   "为",
 ]);
 
-// Cyrillic / Greek letters that look like Latin ones. Used for MATCHING only.
-const CONFUSABLES = {
-  а: "a",
-  е: "e",
-  о: "o",
-  р: "p",
-  с: "c",
-  у: "y",
-  х: "x",
-  і: "i",
-  ј: "j",
-  ѕ: "s",
-  ԁ: "d",
-  һ: "h",
-  т: "t",
-  к: "k",
-  м: "m",
-  н: "h",
-  в: "b",
-  А: "a",
-  В: "b",
-  Е: "e",
-  К: "k",
-  М: "m",
-  Н: "h",
-  О: "o",
-  Р: "p",
-  С: "c",
-  Т: "t",
-  Х: "x",
-  У: "y",
-  ο: "o",
-  ρ: "p",
-  α: "a",
-  ε: "e",
-  ι: "i",
-  κ: "k",
-  ν: "v",
-  τ: "t",
-  υ: "u",
-  χ: "x",
-  β: "b",
-  η: "n",
-  μ: "u",
-  ω: "w",
-  σ: "s",
-  Α: "a",
-  Β: "b",
-  Ε: "e",
-  Ζ: "z",
-  Η: "h",
-  Ι: "i",
-  Κ: "k",
-  Μ: "m",
-  Ν: "n",
-  Ο: "o",
-  Ρ: "p",
-  Τ: "t",
-  Υ: "y",
-  Χ: "x",
-};
 const LEET = {
   0: "o",
   1: "i",
@@ -218,11 +163,6 @@ function normalise(input) {
   return s.replace(/\s+/g, " ").trim();
 }
 
-function fold(s) {
-  let out = "";
-  for (const ch of String(s).toLowerCase()) out += CONFUSABLES[ch] || ch;
-  return out;
-}
 // label sets folded the same way tokens are (look-alike letters become Latin), so matching is symmetric
 const foldLabel = (w) => fold(w).replace(/[-_\s]/g, "");
 const STRONG_F = new Set([...STRONG].map(foldLabel));
@@ -518,6 +458,10 @@ function markCodeValue(tokens, start, mark) {
 }
 const EMOJI_RE = new RegExp(`^(?:${EMOJI_LABELS.join("|")})`, "u");
 
+// one word of a label phrase: a credential word (compounds included) or a code word (PIN, OTP)
+const policyWordKind = (w) =>
+  kwKind(w) || (inLabelSet(PIN_LABELS, labelKey(w)) ? "strong" : null);
+
 /**
  * Sanitise a user-written string. opts.kind: 'name' (default) or 'note' (stricter, used for sticky notes).
  * counters.names counts distinct strings in which something was actually redacted.
@@ -570,6 +514,17 @@ function sanitizeText(input, opts = {}) {
     ) {
       mark[0] = true;
     }
+  }
+
+  // label phrase + separator + value: "Secret Key: tangerine", "Door PIN: 4821", "api key = tangerine"
+  // (src/value-rule.js). The phrase is up to three words before the separator; "=" takes any token.
+  for (let i = 0; i < n; i++) {
+    const sep = separatorAt(tokens, i);
+    if (!sep || sep.value === null || redactedRe.test(sep.value)) continue;
+    const kind = separatorKind(sep.sep, phraseKindOf(sep.words, policyWordKind));
+    if (!kind || !isLabelledValue(kind, sep.value)) continue;
+    if (sep.attached) partial.set(i, `${sep.base}${sep.sep}[redacted]`);
+    else mark[sep.valueIdx] = true;
   }
 
   // runs of spaced digits ("4 8 1 5 9 2") and grouped numbers (cards, IBANs)
@@ -666,7 +621,8 @@ function sanitizeText(input, opts = {}) {
     }
     // attached assignment: api_key=VALUE, password:VALUE, "token":"VALUE"
     const m = /^["'`]?([^:=\s"'`]{1,40})["'`]?([:=])["'`]?(.+)$/u.exec(t);
-    const attachedKind = m && !t.includes("://") ? kwKind(m[1]) : null;
+    const attachedKind =
+      m && !t.includes("://") ? separatorKind(m[2], kwKind(m[1])) : null;
     if (
       attachedKind &&
       (attachedKind === "strong" || isLabelledValue("weak", m[3]))
