@@ -156,9 +156,31 @@ function decodeLine(raw) {
 
 // ---- labels inside compounds (DB-Password, db_password, dbPassword, Login-PIN) ----
 const GATE_LABELS = new Set([...LABEL_SET, ...PIN_LABELS]);
-// a dash between a label and a plain dictionary word ("Password - reset email") is prose, not an assignment
+// A name after a credential label and a DASH: "Credentials - Slack." or a table cell "<td>Credentials - Slack</td>". A run of
+// plain-letter words (<= 20 letters each) that ends at a sentence mark, quote, comma or markup boundary is prose, not a value.
+// Any digit or symbol makes it a value. Colon and "=" values are never exempt: "password: tangerine" stays blocked.
 const DASH_MARKS = new Set(["-", "–", "—"]);
-const PLAIN_WORD = /^\p{L}+$/u;
+const PLAIN_WORD = /^\p{L}{1,20}$/u;
+const FIELD_END = /["'`,;|<>()[\]{}“”‘’]/u;
+// the word up to the first field/markup mark, and whether the run ends there (quote, comma, bracket, sentence mark)
+function plainPiece(t) {
+  const c = t.replace(/^["'`([“‘]+/u, "");
+  const cut = c.search(FIELD_END);
+  const piece = cut >= 0 ? c.slice(0, cut) : c;
+  const ends = cut >= 0 || /[.:!?…]$/u.test(piece);
+  return { word: piece.replace(/[.,;:!?…]+$/u, ""), ends };
+}
+function plainRun(toks, start, breaks = new Set()) {
+  if (start >= toks.length) return false;
+  for (let j = start; j < toks.length; j++) {
+    if (j > start && breaks.has(j)) return true; // a table cell or tag ended the value
+    const { word, ends } = plainPiece(toks[j]);
+    if (word === "" && ends && j > start) return true; // a bare quote or comma closes the run
+    if (!PLAIN_WORD.test(word)) return false;
+    if (ends) return true;
+  }
+  return true;
+}
 const MARK_TOKENS = new Set([
   ":",
   "=",
@@ -246,11 +268,14 @@ function isGateStrong(tok) {
 }
 
 function labelValuePass(line, add) {
-  const toks = line
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\|/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
+  // tokens as before; `breaks` marks the first token of each markup segment (a table cell, a tag)
+  const toks = [];
+  const breaks = new Set();
+  line.split(/<[^>]*>/).forEach((seg) => {
+    const ws = seg.replace(/\|/g, " ").split(/\s+/).filter(Boolean);
+    if (ws.length && toks.length) breaks.add(toks.length);
+    toks.push(...ws);
+  });
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i];
     if (t.startsWith("$") || t.includes("://")) continue;
@@ -295,6 +320,8 @@ function labelValuePass(line, add) {
     }
     while (marked && p < toks.length && MARK_TOKENS.has(toks[p].toLowerCase()))
       markToks.push(toks[p++]);
+    // only a dash (never a colon or "=") makes a plain-letter run a name: "Credentials - Slack" is prose,
+    // "Credentials: Slack" and "password: tangerine" stay values
     const dashOnly =
       !/[:=]$/.test(toks[i + span - 1]) &&
       markToks.length > 0 &&
@@ -314,9 +341,8 @@ function labelValuePass(line, add) {
       p < toks.length &&
       nonEmptyValue(toks[p].replace(/^["'`]+|["'`,;]+$/g, ""))
     ) {
-      // the value's own word, not what a CSV quote or comma glued to it
-      const core = toks[p].replace(/^["'`([]+/, "").split(/["'`,;)\]]/)[0];
-      if (dashOnly && PLAIN_WORD.test(core)) continue;
+      // ordinary names ("Credentials - Slack.", "Credentials: Google Sheets") are not values
+      if (dashOnly && plainRun(toks, p, breaks)) continue;
       add("credential label followed by an assigned value");
     }
   }
