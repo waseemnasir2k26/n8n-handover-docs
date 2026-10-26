@@ -19,6 +19,10 @@
 //   ALLOW_PHRASES: label words inside these phrases are not labels ("Secret Santa", "Key Accounts").
 //     With ":", "=" or a dash and ONE token ending the name, that token is a weak-label value
 //     ("Key Accounts: tangerine", "Key Accounts - tangerine"); two or more plain words stay a name.
+//   1.0.2 dash allow-list (fail closed): after a DASH, ONE token that ends the name is kept as a name only
+//     if it is in KEPT_NOUNS or is an n8n node type name in the workflow (setNodeTypeNames). Any other single
+//     token is the value ("Key Accounts - Tangerine", "Password - Zebra"; "PIN Code Generator - Sheet" stays).
+//     ":" and "=" have no allow-list ("Password: reset" is a value).
 // labelledValue() is the one decision for those rules; isLabelledValue() stays for attached / "is" forms.
 
 // Cyrillic / Greek letters that look like Latin ones. Used for MATCHING only.
@@ -151,6 +155,78 @@ function plainWord(token) {
   return /^\p{L}[\p{L}'’-]*$/u.test(c) && !valueShaped(c);
 }
 
+// Single-token nouns that may follow a label after a DASH and still be a name ("PIN Code Generator - Sheet",
+// "Secret Sauce - Recipe", "Credentials - Slack"). Everything else after a dash is the value (fail closed).
+// Not used after ":" or "=": "Password: reset" is a value.
+const KEPT_NOUNS = new Set(
+  [
+    "sheet",
+    "sheets",
+    "recipe",
+    "flow",
+    "workflow",
+    "generator",
+    "report",
+    "reports",
+    "sync",
+    "email",
+    "emails",
+    "slack",
+    "gmail",
+    "notion",
+    "airtable",
+    "webhook",
+    "trigger",
+    "reset",
+    "rotation",
+    "manager",
+    "vault",
+    "setup",
+    "config",
+    "docs",
+    "template",
+    "backup",
+    "check",
+    "refresh",
+    "renew",
+    "list",
+    "form",
+    "api",
+    "crm",
+    "hubspot",
+    "stripe",
+    "shopify",
+    "drive",
+    "calendar",
+    "telegram",
+    "discord",
+    "twilio",
+    "openai",
+  ].map((w) => fold(w)),
+);
+// n8n node type names seen in the workflow JSON being rendered (set by generate()), folded, letters only.
+let NODE_TYPE_NAMES = new Set();
+const compact = (s) => fold(s).replace(/[^\p{L}\p{N}]/gu, "");
+
+/** Replace the node-type names used by the keep-list. "n8n-nodes-base.googleSheets" -> "googlesheets". */
+function setNodeTypeNames(types) {
+  NODE_TYPE_NAMES = new Set();
+  for (const t of types || []) {
+    if (typeof t !== "string") continue;
+    const k = compact(t.split(".").pop());
+    if (k) NODE_TYPE_NAMES.add(k);
+  }
+}
+
+/** A single token that may stay a name after a dash: an allow-listed noun or an n8n node type name. */
+function isKeptNoun(token) {
+  const c = String(token == null ? "" : token)
+    .replace(EDGE_OPEN, "")
+    .replace(EDGE_CLOSE, "");
+  const k = compact(c);
+  return k !== "" && (KEPT_NOUNS.has(k) || NODE_TYPE_NAMES.has(k));
+}
+
 /**
  * The shared decision for a token after a label phrase and a separator.
  *   sep: ":" | "=" | "-" (a dash) | null (any other marker: falls back to isLabelledValue).
@@ -164,8 +240,9 @@ function labelledValue(kind, sep, token, next) {
   if (sep !== ":" && sep !== "-") return isLabelledValue(kind, c);
   if (kind === "strong") {
     if (sep === ":") return true;
-    // dash: two or more plain words are a name
-    return !(plainWord(c) && next != null && plainWord(next));
+    // dash: two or more plain words are a name; one kept noun that ends the name is a name too
+    if (plainWord(c) && next != null && plainWord(next)) return false;
+    return !(next == null && isKeptNoun(c));
   }
   if (kind !== "weak") return false;
   if (valueShaped(c)) return true;
@@ -242,18 +319,14 @@ function separatorAt(tokens, i, breaks = new Set()) {
   const next = nextToken(tokens, valueIdx + 1, breaks);
   // An allow-listed phrase is never a label by itself. "Key Accounts: tangerine" (":" or "=", ONE token,
   // end of name) is a weak label for that token; two or more words after it are a name.
-  // A dash ("Key Accounts - tangerine") takes the same ":" rule, applied as ":" below, but only for a
-  // value-looking token (lower-case or value-shaped). A Title Case word ("PIN Code Generator - Sheet",
-  // "Secret Sauce - Recipe") is a name, as before.
-  const dashValue = (v) => {
-    const c = String(v).replace(EDGE_OPEN, "").replace(EDGE_CLOSE, "");
-    return valueShaped(c) || /^\p{Ll}/u.test(c);
-  };
+  // A dash ("Key Accounts - Tangerine", "Secret Santa - tangerine") takes the same rule, applied as ":",
+  // unless the one token is an allow-listed noun or n8n node type ("PIN Code Generator - Sheet" stays a name).
   const allowedSingle =
     raw.length > words.length &&
-    (sep === ":" || sep === "=" || (sep === "-" && dashValue(value))) &&
+    (sep === ":" || sep === "=" || sep === "-") &&
     value !== null &&
-    next === null;
+    next === null &&
+    !(sep === "-" && isKeptNoun(value));
   if (!words.length && !allowedSingle) return null;
   const applied = sep === "-" && allowedSingle ? ":" : sep;
   return {
@@ -308,4 +381,6 @@ module.exports = {
   nextToken,
   stripAllowed,
   plainWord,
+  isKeptNoun,
+  setNodeTypeNames,
 };

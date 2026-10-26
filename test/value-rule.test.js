@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { sanitizeText } = require("../src/policy");
 const { scanText } = require("../src/gate");
-const { isLabelledValue, valueShaped } = require("../src/value-rule");
+const { isLabelledValue, valueShaped, setNodeTypeNames } = require("../src/value-rule");
 
 test("strong labels: label + separator + any token is the value, in the policy and the gate", () => {
   for (const t of [
@@ -93,13 +93,16 @@ test("dash rule: strong + dash + ONE token at the end redacts; two or more plain
   for (const t of [
     "Secret - tangerine",
     "Password - hunter2",
-    "Secret Key - Rotation",
     "Password - Winter25x",
   ]) {
     assert.match(sanitizeText(t), /\[redacted\]/, t);
     assert.ok(scanText(t).length > 0, t);
   }
-  for (const t of ["Password - Reset Flow", "Secret - Vault Backup"]) {
+  for (const t of [
+    "Password - Reset Flow",
+    "Secret - Vault Backup",
+    "Secret Key - Rotation",
+  ]) {
     assert.equal(sanitizeText(t), t, t);
     assert.deepEqual(scanText(t), [], t);
   }
@@ -149,13 +152,49 @@ test("allow-listed phrase + dash + lower-case value: redacted; Title Case name w
     assert.match(sanitizeText(t), /\[redacted\]/, t);
     assert.ok(scanText(t).length > 0, t);
   }
+  for (const t of ["PIN Code Generator - Sheet", "Secret Sauce - Recipe"]) {
+    assert.equal(sanitizeText(t), t, t);
+    assert.deepEqual(scanText(t), [], t);
+  }
+});
+
+test("1.0.2: a Title Case single token after a dash is a value unless it is an allow-listed noun", () => {
+  for (const t of [
+    "Key Accounts - Tangerine",
+    "Password - Zebra",
+    "Secret Santa - Tangerine",
+    "Key Accounts - Quarterly",
+  ]) {
+    assert.match(sanitizeText(t), /\[redacted\]/, t);
+    assert.ok(scanText(t).length > 0, t);
+  }
   for (const t of [
     "PIN Code Generator - Sheet",
     "Secret Sauce - Recipe",
-    "Key Accounts - Quarterly",
+    "Credentials - Slack",
+    "Password - Reset Flow",
   ]) {
     assert.equal(sanitizeText(t), t, t);
     assert.deepEqual(scanText(t), [], t);
+  }
+});
+
+test("1.0.2: a kept noun does not keep a value that follows it, and never after a colon", () => {
+  assert.match(sanitizeText("Password - Sheet 4821"), /\[redacted\]/);
+  assert.match(sanitizeText("Password: reset"), /\[redacted\]/);
+  assert.match(sanitizeText("Password: sheet"), /\[redacted\]/);
+});
+
+test("1.0.2: n8n node type names from the workflow JSON are kept nouns after a dash", () => {
+  setNodeTypeNames(["n8n-nodes-base.googleSheets"]);
+  try {
+    assert.equal(
+      sanitizeText("Secret - GoogleSheets"),
+      "Secret - GoogleSheets",
+    );
+    assert.match(sanitizeText("Secret - Zebra"), /\[redacted\]/);
+  } finally {
+    setNodeTypeNames([]);
   }
 });
 

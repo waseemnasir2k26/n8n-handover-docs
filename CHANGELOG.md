@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2 - 2026-10-26
+
+- Dash rule fails closed: after a label phrase and a dash, ONE token that ends the name is redacted unless it is an allow-listed workflow noun (sheet, recipe, flow, sync, slack, reset, rotation, ...) or an n8n node type name in the workflow. `Key Accounts - Tangerine`, `Secret Santa - Tangerine`, `Password - Zebra` are redacted; `PIN Code Generator - Sheet`, `Secret Sauce - Recipe`, `Credentials - Slack`, `Password - Reset Flow` stay. ":" and "=" are unchanged.
+- Changed from 1.0.1: `Key Accounts - Quarterly` is now redacted (a Title Case name word is no longer kept), and `Secret Key - Rotation` is kept (`rotation` is an allow-listed noun).
+
 ## 1.0.1 - 2026-10-26
 
 - Dash form of an allow-listed phrase redacts its value: `Key Accounts - tangerine`, `Secret Santa - tangerine` (also en and em dash). Two or more words after the dash stay a name (`Key Accounts - weekly sync`). The file name comes from the redacted name.

@@ -85,7 +85,7 @@ The HTML loads Mermaid 11.4.1 from jsDelivr with a pinned version and an SRI has
 
 It is best-effort. Names and credential names are copied as written after the policy, and the label rules are these, exactly:
 
-- Strong label (password, pin, secret ...) + ` - ` + one token at the end of the name: that token is redacted ("Secret - tangerine"). Two or more plain words: a name ("Password - Reset Flow").
+- Strong label (password, pin, secret ...) + ` - ` + one token at the end of the name: that token is redacted ("Secret - tangerine", "Password - Zebra") unless it is a workflow noun from the allow-list (sheet, recipe, flow, sync, slack, reset, rotation, ...) or an n8n node type in the workflow, which stays a name ("Secret Sauce - Recipe", "PIN Code Generator - Sheet"). Two or more plain words: a name ("Password - Reset Flow").
 - Weak label (token, key, credentials, login ...) + `:` + one plain word at the end: redacted ("Token: Zebra", "Access Token: zebra"). Two or more plain words: a name ("Token: refresh job").
 - Weak label + ` - ` + any plain words: a name ("Credentials - Slack").
 - "Secret Santa", "Secret Sauce", "Key Accounts", "Key Results", "Key Performance Indicators" and "PIN Code Generator" are never labels on their own. With ":" or "=" and one token ending the name, that token is redacted ("Key Accounts: tangerine", "Secret Santa: abc"); two or more words after it stay ("Key Results: Q4 review", "Key Accounts: weekly sync").

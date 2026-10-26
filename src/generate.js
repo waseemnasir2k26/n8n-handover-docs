@@ -5,6 +5,7 @@ const { analyzeWorkflow } = require("./parse");
 const { workflowBlocks, indexBlocks } = require("./doc");
 const { blocksToMd, htmlPage, inventoryCsv } = require("./render");
 const { slugify } = require("./util");
+const { setNodeTypeNames } = require("./value-rule");
 const { summarize } = require("./llm");
 const { scanPack: gateScan } = require("./gate");
 const { MERMAID_URL, MERMAID_SRI } = require("./render");
@@ -74,6 +75,8 @@ function forbiddenStrings(workflows, extra = []) {
 async function generate(workflows, opts = {}) {
   const warnings = [];
   const idToName = new Map();
+  // n8n node type names in these workflows are keep-list nouns after a dash (src/value-rule.js)
+  setNodeTypeNames(workflows.flatMap((wf) => (wf && Array.isArray(wf.nodes) ? wf.nodes.map((n) => n && n.type) : [])));
   for (const wf of workflows)
     if (wf && typeof wf.id === "string" && typeof wf.name === "string")
       idToName.set(wf.id, wf.name);
