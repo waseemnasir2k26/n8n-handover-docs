@@ -20,7 +20,7 @@ const NAMES = [
   "API Key: Customer Rotation",
   "Auth: Google Callback",
   "Login: Daily Alerts",
-  "Key Accounts: Alice",
+  "Key Accounts: Alice Smith",
   "Secret Santa: Alice Smith",
   "Credentials - Slack",
   "Credentials - Google Sheets",

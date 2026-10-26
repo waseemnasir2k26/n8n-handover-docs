@@ -23,6 +23,7 @@ const {
   isLabelledValue,
   labelledValue,
   separatorAt,
+  separatorKindAt,
   separatorKind,
   phraseKindOf,
   fold,
@@ -522,7 +523,7 @@ function sanitizeText(input, opts = {}) {
   for (let i = 0; i < n; i++) {
     const sep = separatorAt(tokens, i);
     if (!sep || sep.value === null || redactedRe.test(sep.value)) continue;
-    const kind = separatorKind(sep.sep, phraseKindOf(sep.words, policyWordKind));
+    const kind = separatorKindAt(sep, policyWordKind);
     if (!kind || !labelledValue(kind, sep.sep, sep.value, sep.next)) continue;
     if (sep.attached) partial.set(i, `${sep.base}${sep.sep}[redacted]`);
     else mark[sep.valueIdx] = true;

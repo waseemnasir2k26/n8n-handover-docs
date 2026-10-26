@@ -88,7 +88,7 @@ It is best-effort. Names and credential names are copied as written after the po
 - Strong label (password, pin, secret ...) + ` - ` + one token at the end of the name: that token is redacted ("Secret - tangerine"). Two or more plain words: a name ("Password - Reset Flow").
 - Weak label (token, key, credentials, login ...) + `:` + one plain word at the end: redacted ("Token: Zebra", "Access Token: zebra"). Two or more plain words: a name ("Token: refresh job").
 - Weak label + ` - ` + any plain words: a name ("Credentials - Slack").
-- "Secret Santa", "Secret Sauce", "Key Accounts", "Key Results", "Key Performance Indicators" and "PIN Code Generator" are never labels.
+- "Secret Santa", "Secret Sauce", "Key Accounts", "Key Results", "Key Performance Indicators" and "PIN Code Generator" are never labels on their own. With ":" or "=" and one token ending the name, that token is redacted ("Key Accounts: tangerine", "Secret Santa: abc"); two or more words after it stay ("Key Results: Q4 review", "Key Accounts: weekly sync").
 
 Documented limits: a secret with no label, no digit and no symbol (a plain word, "tangerine" with no label) is not detected, and a strong label followed by a colon redacts the next word even when it is ordinary ("Pin: Board Meeting" becomes "Pin: [redacted] Meeting"). Also not detected: a short unlabelled password inside a longer name ("Client CRM hunter22"), an address or other personal detail in notes, a secret split across fields, personal data that is not an e-mail or phone number, or something typed into a name in a way nobody has thought of yet. Every generated pack opens with a "What was redacted or hidden" table (counts by kind) so you can see what the tool did. Read the pack before it leaves your hands.
 

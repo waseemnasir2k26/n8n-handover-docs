@@ -17,6 +17,7 @@
 //   weak + ":" + ONE plain token at the end of the name -> the value ("Token: Zebra", "Access Token: zebra");
 //     weak + ":" + two or more plain words -> a name ("Token: refresh job").
 //   ALLOW_PHRASES: label words inside these phrases are not labels ("Secret Santa", "Key Accounts").
+//     With ":" or "=" and ONE token ending the name, that token is a weak-label value ("Key Accounts: tangerine").
 // labelledValue() is the one decision for those rules; isLabelledValue() stays for attached / "is" forms.
 
 // Cyrillic / Greek letters that look like Latin ones. Used for MATCHING only.
@@ -116,7 +117,8 @@ function valueShaped(token) {
   return [...c].length >= 20 && entropy(c) >= 4.2;
 }
 
-// Phrases whose words are never a credential label ("Secret Santa: Alice", "Key Accounts - Q3").
+// Phrases whose words are never a credential label ("Secret Santa draw", "Key Results: Q4 review").
+// With ":" or "=" and ONE token ending the name, that token is the value ("Key Accounts: tangerine").
 const ALLOW_PHRASES = [
   ["secret", "santa"],
   ["secret", "sauce"],
@@ -228,14 +230,24 @@ function separatorAt(tokens, i, breaks = new Set()) {
     if (!isWordToken(tokens[j]) || breaks.has(j + 1)) break;
     before.unshift(String(tokens[j]).replace(EDGE_WORD, ""));
   }
-  const words = stripAllowed(base === null ? before : [...before, base]);
-  if (!words.length) return null;
+  const raw = base === null ? before : [...before, base];
+  const words = stripAllowed(raw);
   const attached = value !== null;
   if (!attached && i + 1 < tokens.length) value = String(tokens[i + 1]);
   const valueIdx = attached ? i : i + 1;
-  const nextIdx = valueIdx + 1;
-  const next = nextToken(tokens, nextIdx, breaks);
-  return { sep, base, words, value, valueIdx, attached, next };
+  const next = nextToken(tokens, valueIdx + 1, breaks);
+  // An allow-listed phrase is never a label by itself. "Key Accounts: tangerine" (":" or "=", ONE token,
+  // end of name) is a weak label for that token; two or more words after it are a name.
+  const allowedSingle =
+    raw.length > words.length && (sep === ":" || sep === "=") && value !== null && next === null;
+  if (!words.length && !allowedSingle) return null;
+  return { sep, base, words, value, valueIdx, attached, next, allowedSingle };
+}
+
+/** The kind a separator applies to the token after it (see separatorKind); allowedSingle is a weak label. */
+function separatorKindAt(sep, kindOfWord) {
+  const phraseKind = phraseKindOf(sep.words, kindOfWord) || (sep.allowedSingle ? "weak" : null);
+  return separatorKind(sep.sep, phraseKind);
 }
 
 /** Kind of a label phrase: "strong" if any word is strong, else "weak" if any word is weak, else null. */
@@ -263,6 +275,7 @@ module.exports = {
   valueShaped,
   fold,
   separatorAt,
+  separatorKindAt,
   phraseKindOf,
   separatorKind,
   isWordToken,

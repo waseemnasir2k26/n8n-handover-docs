@@ -3,3 +3,5 @@
 89e53c183aeabdc580bf589dc6b6b3325d5fa0cb:test/usefulness-pipeline.test.js:generic-api-key:148
 89e53c183aeabdc580bf589dc6b6b3325d5fa0cb:test/usefulness-pipeline.test.js:generic-api-key:149
 89e53c183aeabdc580bf589dc6b6b3325d5fa0cb:test/value-rule.test.js:generic-api-key:24
+# test/value-rule.test.js:24 fixtures Token: ghp_abc123XYZ and API Key: sk-live-abc123 (synthetic, not real secrets). Fingerprint at commit 2eac589 (both findings share one fingerprint).
+2eac58968ead01c6dfefe828fa817ae6fb17af74:test/value-rule.test.js:generic-api-key:24

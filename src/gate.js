@@ -26,6 +26,7 @@ const {
   labelledValue,
   nextToken,
   separatorAt,
+  separatorKindAt,
   separatorKind,
   phraseKindOf,
 } = require("./value-rule");
@@ -372,7 +373,7 @@ function separatorPass(line, add) {
   for (let i = 0; i < toks.length; i++) {
     const sep = separatorAt(toks, i, breaks);
     if (!sep || sep.value === null) continue;
-    const kind = separatorKind(sep.sep, phraseKindOf(sep.words, labelKind));
+    const kind = separatorKindAt(sep, labelKind);
     const v = sep.value.replace(/^["'`]+|["'`,;]+$/g, "");
     if (kind && nonEmptyValue(v) && labelledValue(kind, sep.sep, v, sep.next))
       add("credential label phrase followed by an assigned value");

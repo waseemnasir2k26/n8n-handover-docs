@@ -81,7 +81,7 @@ test("dash rule: weak + dash + any plain words is a name; a value-looking token 
 });
 
 test("phrase allow-list: Secret Santa, Key Accounts, PIN Code Generator are never labels", () => {
-  for (const t of ["Secret Santa: Alice Smith", "Key Accounts: Alice", "Key Results: Q3 Growth", "PIN Code Generator - Sheet", "Secret Sauce - Recipe"]) {
+  for (const t of ["Secret Santa: Alice Smith", "Key Accounts: Alice Smith", "Key Results: Q3 Growth", "PIN Code Generator - Sheet", "Secret Sauce - Recipe"]) {
     assert.equal(sanitizeText(t), t, t);
     assert.deepEqual(scanText(t), [], t);
   }
@@ -91,4 +91,18 @@ test("phrase allow-list: Secret Santa, Key Accounts, PIN Code Generator are neve
 test("Pin: Board Meeting is over-redacted by design (a strong label with a colon takes the next word)", () => {
   assert.equal(sanitizeText("Pin: Board Meeting"), "Pin: [redacted] Meeting");
   assert.ok(scanText("Pin: Board Meeting").length > 0);
+});
+
+test("allow-listed phrase + ':' or '=' + ONE token ending the name: that token is redacted", () => {
+  for (const t of ["Key Accounts: tangerine", "Secret Santa: abc", "Key Accounts = tangerine"]) {
+    assert.match(sanitizeText(t), /\[redacted\]/, t);
+    assert.ok(scanText(t).length > 0, t);
+  }
+});
+
+test("allow-listed phrase + two or more plain words, or no separator, stays a name", () => {
+  for (const t of ["Key Results: Q4 review", "Key Accounts: weekly sync", "Secret Santa draw"]) {
+    assert.equal(sanitizeText(t), t, t);
+    assert.deepEqual(scanText(t), [], t);
+  }
 });
