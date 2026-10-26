@@ -409,150 +409,208 @@ function separatorPass(line, add) {
   }
 }
 
-/** Scan one text. Returns [{line, kind}] */
-function scanText(text) {
+/** CSV rows: RFC 4180 quoting (a doubled quote is a quote). Each row keeps its first line number. */
+function csvRows(text) {
+  const rows = [];
+  let fields = [];
+  let cur = "";
+  let quoted = false;
+  let line = 1;
+  let rowLine = 1;
+  let rowStart = 0;
+  const endRow = (end) => {
+    fields.push(cur);
+    rows.push({ line: rowLine, raw: text.slice(rowStart, end), fields });
+    fields = [];
+    cur = "";
+  };
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else if (c === '"') quoted = false;
+      else {
+        cur += c;
+        if (c === "\n") line++;
+      }
+    } else if (c === '"') quoted = true;
+    else if (c === ",") {
+      fields.push(cur);
+      cur = "";
+    } else if (c === "\n") {
+      endRow(i);
+      line++;
+      rowLine = line;
+      rowStart = i + 1;
+    } else if (c !== "\r") cur += c;
+  }
+  if (rowStart < text.length || cur || fields.length) endRow(text.length);
+  return rows;
+}
+
+/**
+ * One span of text (a line, or one CSV field). Every label and value check runs on this span only:
+ * a value in the next CSV column or table cell can never complete a label in this one.
+ */
+function scanSpan(line, add) {
+  labelValuePass(line, add);
+  separatorPass(line, add);
+  for (const lab of CJK_LABELS) {
+    const at = line.indexOf(lab);
+    if (at < 0) continue;
+    // what directly follows the label (skipping separators) must not be markup or a redaction marker
+    const rest = line
+      .slice(at + lab.length)
+      .replace(/^[\s:\uff1a=\u662f\u4e3a]+/u, "");
+    if (
+      /^[\p{L}\p{N}]/u.test(rest) &&
+      /\p{N}|[A-Za-z]/u.test(rest.split(/[\s|<\]\[()]/)[0].slice(0, 24))
+    )
+      add("credential label followed by a value");
+  }
+  // an emoji label with an explicit colon takes whatever follows ("🔐: winter phrase")
+  for (const e of EMOJI_LABELS) {
+    let from = 0;
+    for (
+      let at = line.indexOf(e, from);
+      at >= 0;
+      at = line.indexOf(e, from)
+    ) {
+      from = at + e.length;
+      const after = line.slice(from).replace(/^️/u, "");
+      const m = /^\s*[:=]\s*(\S+)/u.exec(after);
+      if (
+        m &&
+        !/^\\?\[?redacted/i.test(m[1]) &&
+        /^[\p{L}\p{N}]/u.test(m[1])
+      )
+        add("emoji label with a colon followed by text");
+    }
+  }
+  const tokens = line.split(SPLIT).filter(Boolean);
+  tokens.forEach((t, k) => {
+    const r = suspiciousToken(t);
+    if (r) add(r);
+    // a label of one, two or three words (password, kata sandi, mot de passe)
+    let span = 0;
+    if (isGateLabel(t)) span = 1;
+    else if (isGateLabelExact(t + (tokens[k + 1] || ""))) span = 2;
+    else if (
+      isGateLabelExact(t + (tokens[k + 1] || "") + (tokens[k + 2] || ""))
+    )
+      span = 3;
+    if (
+      span &&
+      isGateStrong(tokens.slice(k, k + span).join("")) &&
+      !/^\[?redacted/i.test(t)
+    ) {
+      for (const nx of tokens.slice(k + span, k + span + 5)) {
+        if (/^\\?\[?redacted/i.test(nx)) break;
+        if (valueLike(nx)) {
+          add("credential word followed by a value");
+          break;
+        }
+      }
+    }
+    if (CODE_WORDS.has(t.replace(EDGE, "").toLowerCase())) {
+      let d = 0;
+      for (const nx of tokens.slice(k + 1, k + 10))
+        d += /^\p{Nd}$/u.test(nx) ? 1 : 0;
+      if (d >= 4) add("code label followed by spaced digits");
+    }
+    // pin / door code / otp followed by digits, spoken digits or NATO words
+    const lab1 = t.replace(EDGE, "").toLowerCase().replace(/[-_]/g, "");
+    const lab2 =
+      lab1 + (tokens[k + 1] || "").replace(EDGE, "").toLowerCase();
+    const pinAt = inLabelSet(PIN_LABELS, lab1)
+      ? 1
+      : inLabelSet(PIN_LABELS, lab2)
+        ? 2
+        : 0;
+    if (pinAt) {
+      const after = tokens.slice(k + pinAt, k + pinAt + 7);
+      if (
+        after.some(
+          (x) =>
+            (x.match(/\p{Nd}/gu) || []).length >= 3 &&
+            !/\p{L}{3,}/u.test(x),
+        )
+      )
+        add("code label followed by digits");
+      let sp = 0;
+      let na = 0;
+      for (const x of after) {
+        const w = x.toLowerCase().replace(/[^\p{L}]/gu, "");
+        sp = SPOKEN_DIGITS.has(w) ? sp + 1 : 0;
+        na = NATO.has(w) ? na + 1 : 0;
+        if (sp === 3) add("code label followed by spoken digits");
+        if (na === 2) add("code label followed by NATO words");
+      }
+    }
+    // emoji labels (key, lock) followed by a value
+    // glued form: key-emoji followed directly by the value
+    const glued = EMOJI_LABELS.find(
+      (e) => t.startsWith(e) && t.length > e.length,
+    );
+    if (glued) {
+      const restG = t.slice(glued.length).replace(/^[️:=]+/u, "");
+      if (restG && (valueLike(restG) || /\p{N}/u.test(restG)))
+        add("emoji label followed by a value");
+    }
+    if (EMOJI_LABELS.includes(t.replace(/[️:=]/g, ""))) {
+      for (const nx of tokens.slice(k + 1, k + 4)) {
+        if (/^\\?\[?redacted/i.test(nx)) break;
+        if (
+          valueLike(nx) ||
+          ((/\p{N}/u.test(nx) || /[!@#$%^&*+~]/.test(nx)) &&
+            codePoints(nx).length >= 3)
+        ) {
+          add("emoji label followed by a value");
+          break;
+        }
+      }
+    }
+  });
+}
+
+/** Checks over the whole row: runs of digits may legitimately span cells. */
+function scanRow(line, add) {
+  const tokens = line.split(SPLIT).filter(Boolean);
+  // spaced digit runs (4 8 1 5 9 2) and grouped numbers (cards, IBANs)
+  let run = 0;
+  let grp = 0;
+  for (const t of tokens) {
+    run = /^\p{Nd}$/u.test(t) ? run + 1 : 0;
+    grp = /^\d{3,4}$/.test(t) ? grp + 1 : 0;
+    if (run === 5) add("spaced digit run");
+    if (grp === 3) add("grouped number");
+  }
+  if (/\b\d{3}-\d{2}-\d{4}\b/.test(line)) add("SSN-like number");
+}
+
+/** Scan one text. Returns [{line, kind}]. CSV: every field is a span of its own (see csvRows). */
+function scanText(text, { csv = false } = {}) {
   const hits = [];
-  String(text)
-    .split("\n")
-    .forEach((raw, i) => {
-      const line = decodeLine(raw);
-      const tokens = line.split(SPLIT).filter(Boolean);
-      const seen = new Set();
-      const add = (kind) => {
-        if (!seen.has(kind)) {
-          seen.add(kind);
-          hits.push({ line: i + 1, kind });
-        }
-      };
-      labelValuePass(line, add);
-      separatorPass(line, add);
-      // CJK / Hangul / Kana labels inside tokens: 密码是蓝天白云88, パスワード:さくら77
-      for (const lab of CJK_LABELS) {
-        const at = line.indexOf(lab);
-        if (at < 0) continue;
-        // what directly follows the label (skipping separators) must not be markup or a redaction marker
-        const rest = line
-          .slice(at + lab.length)
-          .replace(/^[\s:\uff1a=\u662f\u4e3a]+/u, "");
-        if (
-          /^[\p{L}\p{N}]/u.test(rest) &&
-          /\p{N}|[A-Za-z]/u.test(rest.split(/[\s|<\]\[()]/)[0].slice(0, 24))
-        )
-          add("credential label followed by a value");
+  const rows = csv
+    ? csvRows(String(text))
+    : String(text)
+        .split("\n")
+        .map((raw, i) => ({ line: i + 1, raw, fields: null }));
+  for (const row of rows) {
+    const seen = new Set();
+    const add = (kind) => {
+      if (!seen.has(kind)) {
+        seen.add(kind);
+        hits.push({ line: row.line, kind });
       }
-      // an emoji label with an explicit colon takes whatever follows ("🔐: winter phrase")
-      for (const e of EMOJI_LABELS) {
-        let from = 0;
-        for (
-          let at = line.indexOf(e, from);
-          at >= 0;
-          at = line.indexOf(e, from)
-        ) {
-          from = at + e.length;
-          const after = line.slice(from).replace(/^️/u, "");
-          const m = /^\s*[:=]\s*(\S+)/u.exec(after);
-          if (
-            m &&
-            !/^\\?\[?redacted/i.test(m[1]) &&
-            /^[\p{L}\p{N}]/u.test(m[1])
-          )
-            add("emoji label with a colon followed by text");
-        }
-      }
-      // spaced digit runs (4 8 1 5 9 2) and grouped numbers (cards, IBANs)
-      let run = 0;
-      let grp = 0;
-      for (const t of tokens) {
-        run = /^\p{Nd}$/u.test(t) ? run + 1 : 0;
-        grp = /^\d{3,4}$/.test(t) ? grp + 1 : 0;
-        if (run === 5) add("spaced digit run");
-        if (grp === 3) add("grouped number");
-      }
-      if (/\b\d{3}-\d{2}-\d{4}\b/.test(line)) add("SSN-like number");
-      tokens.forEach((t, k) => {
-        const r = suspiciousToken(t);
-        if (r) add(r);
-        // a label of one, two or three words (password, kata sandi, mot de passe)
-        let span = 0;
-        if (isGateLabel(t)) span = 1;
-        else if (isGateLabelExact(t + (tokens[k + 1] || ""))) span = 2;
-        else if (
-          isGateLabelExact(t + (tokens[k + 1] || "") + (tokens[k + 2] || ""))
-        )
-          span = 3;
-        if (
-          span &&
-          isGateStrong(tokens.slice(k, k + span).join("")) &&
-          !/^\[?redacted/i.test(t)
-        ) {
-          for (const nx of tokens.slice(k + span, k + span + 5)) {
-            if (/^\\?\[?redacted/i.test(nx)) break;
-            if (valueLike(nx)) {
-              add("credential word followed by a value");
-              break;
-            }
-          }
-        }
-        if (CODE_WORDS.has(t.replace(EDGE, "").toLowerCase())) {
-          let d = 0;
-          for (const nx of tokens.slice(k + 1, k + 10))
-            d += /^\p{Nd}$/u.test(nx) ? 1 : 0;
-          if (d >= 4) add("code label followed by spaced digits");
-        }
-        // pin / door code / otp followed by digits, spoken digits or NATO words
-        const lab1 = t.replace(EDGE, "").toLowerCase().replace(/[-_]/g, "");
-        const lab2 =
-          lab1 + (tokens[k + 1] || "").replace(EDGE, "").toLowerCase();
-        const pinAt = inLabelSet(PIN_LABELS, lab1)
-          ? 1
-          : inLabelSet(PIN_LABELS, lab2)
-            ? 2
-            : 0;
-        if (pinAt) {
-          const after = tokens.slice(k + pinAt, k + pinAt + 7);
-          if (
-            after.some(
-              (x) =>
-                (x.match(/\p{Nd}/gu) || []).length >= 3 &&
-                !/\p{L}{3,}/u.test(x),
-            )
-          )
-            add("code label followed by digits");
-          let sp = 0;
-          let na = 0;
-          for (const x of after) {
-            const w = x.toLowerCase().replace(/[^\p{L}]/gu, "");
-            sp = SPOKEN_DIGITS.has(w) ? sp + 1 : 0;
-            na = NATO.has(w) ? na + 1 : 0;
-            if (sp === 3) add("code label followed by spoken digits");
-            if (na === 2) add("code label followed by NATO words");
-          }
-        }
-        // emoji labels (key, lock) followed by a value
-        // glued form: key-emoji followed directly by the value
-        const glued = EMOJI_LABELS.find(
-          (e) => t.startsWith(e) && t.length > e.length,
-        );
-        if (glued) {
-          const restG = t.slice(glued.length).replace(/^[️:=]+/u, "");
-          if (restG && (valueLike(restG) || /\p{N}/u.test(restG)))
-            add("emoji label followed by a value");
-        }
-        if (EMOJI_LABELS.includes(t.replace(/[️:=]/g, ""))) {
-          for (const nx of tokens.slice(k + 1, k + 4)) {
-            if (/^\\?\[?redacted/i.test(nx)) break;
-            if (
-              valueLike(nx) ||
-              ((/\p{N}/u.test(nx) || /[!@#$%^&*+~]/.test(nx)) &&
-                codePoints(nx).length >= 3)
-            ) {
-              add("emoji label followed by a value");
-              break;
-            }
-          }
-        }
-      });
-    });
+    };
+    const line = decodeLine(row.raw);
+    scanRow(line, add);
+    if (row.fields) for (const f of row.fields) scanSpan(decodeLine(f), add);
+    else scanSpan(line, add);
+  }
   return hits;
 }
 
@@ -571,7 +629,7 @@ function scanPack(files, { mermaidUrl = "", mermaidSri = "" } = {}) {
         .replace(/<script>[\s\S]*?<\/script>/, blank)
         .replace(/<meta [^>]*>/g, "");
     }
-    for (const h of scanText(text))
+    for (const h of scanText(text, { csv: file.endsWith(".csv") }))
       out.push({ file, line: h.line, kind: h.kind, source: "builtin" });
   }
   return out;

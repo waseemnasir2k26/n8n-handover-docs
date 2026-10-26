@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.4 - 2026-10-26
+
+- Fixed a false block (exit 3) on documented-safe names. `examples/workflows/01-lead-alerts.json` with only the workflow name set to `Secret Key - Rotation`, `Credentials - Slack`, `Password - Reset Flow`, `Key Accounts: weekly sync`, `Key Results: Q4 review`, `Token: refresh job` or `Secret Sauce - Recipe` now exits 0 and writes the name verbatim. Cause: the final gate judged a label phrase over the whole CSV line, so the value-looking words of the NEXT column (`"CRM API key"`, `"Owner Gmail"`) completed the label. Correction to 1.0.3: `Secret Key - Rotation` was blocked in the 1.0.3 build too (exit 3, `inventory.csv:4`); the 1.0.3 entry above was wrong to say it was not reproduced.
+- Gate: CSV files are parsed with RFC 4180 quoting and every field is judged alone; markdown and HTML lines are judged per line, with table cells and tags as breaks, as before. The label rules in `src/value-rule.js` are unchanged. A secret in any single CSV column still exits 3.
+- Leak cases still hold: `Password - Slack abc123xyz`, `Token - Sheet Zx9Kq2`, `Secret: Slack 7f3a9b2c` and `Key Accounts - Tangerine` are redacted in the name (exit 0, the value is not written).
+- Tests: `test/round9.test.js` (the seven names through the full pipeline; 21 next-column cases; a secret in each of the six columns; quoted CSV fields; table and tag boundaries).
+- Limit (documented in README): a label in one CSV column and its value in the next column are not joined.
+
 ## 1.0.3 - 2026-10-26
 
 - Fixed a leak: `Password - Slack abc123xyz` kept `abc123xyz` (the rule checked only the first word after the dash). The dash, colon and `=` rules now check every word after the label. A name keeps the rest only when every word is a safe word (letters only, at most 12 letters, no capital after the first letter, or an allow-listed noun, or a reporting period Q1-Q4 / H1-H2 / FY26). Any other word makes the whole rest the value: `Password - Slack abc123xyz` becomes `Password - [redacted]`, `Token - Sheet Zx9Kq2` becomes `Token - [redacted]`, `Secret: Slack 7f3a9b2c` becomes `Secret: [redacted]`.
