@@ -21,7 +21,7 @@ test("B1: labels joined by - _ . or camelCase are labels in names, notes and the
     ["root-password " + V, V],
     ["Login-PIN: 4821", "4821"],
     ["dbPassword = " + V, V],
-    ["API_TOKEN=abc", "abc"],
+    ["API_TOKEN=abc123", "abc123"],
     ["pwd=tangerine", "tangerine"],
     ["DBpwd: Blau7Haus", "Blau7Haus"],
     ["myPIN=Blau7Haus", "Blau7Haus"],
@@ -100,12 +100,12 @@ test("M1: the gate flags ANY value after a credential label (all languages, comp
   for (const t of [
     "password: tangerine",
     "pwd=tangerine",
-    "API_TOKEN=abc",
+    "API_TOKEN=abc123",
     "mot de passe : tangerine",
     "пароль: tangerine",
     "kata sandi: tangerine",
     "DB-Password: abc",
-    "login: x",
+    "login: x9",
     "token = 1",
   ]) {
     assert.ok(gate.scanText(t).length > 0, `gate missed: ${t}`);

@@ -1,7 +1,7 @@
 "use strict";
 // Whole-pipeline usefulness test: the CLI (policy -> render -> final gate -> write) over ordinary
-// must exit 0 and not change any name. Dash forms ("Label - Thing") only: colon forms ("Label: Thing") are still
-// hidden by the name policy (see README limits); the gate alone accepts them (last test).
+// must exit 0 and not change any name. Dash forms ("Label - Thing") and colon forms with WEAK labels
+// ("Credentials: Slack", "Token: refresh job") are ordinary names; the strong/weak rule is in README limits.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const cp = require("node:child_process");
@@ -13,6 +13,14 @@ const { sanitizeText } = require("../src/policy");
 const BIN = path.join(__dirname, "..", "bin", "n8n-handover-docs.js");
 
 const NAMES = [
+  "Credentials: Slack",
+  "Credentials: Google Sheets",
+  "Token: refresh job",
+  "API Key: Rotation",
+  "Auth: Callback",
+  "Login: Alerts",
+  "Key: Rotation",
+  "Access: Granted",
   "Credentials - Slack",
   "Credentials - Google Sheets",
   "Credentials - Gmail Drafts",
@@ -72,8 +80,8 @@ const workflowFor = (name, i) => ({
   connections: {},
 });
 
-test("usefulness corpus has 40 ordinary names and the name policy leaves each one unchanged", () => {
-  assert.equal(NAMES.length, 40);
+test("usefulness corpus has 48 ordinary names (40 dash forms, 8 colon forms) and the name policy leaves each one unchanged", () => {
+  assert.equal(NAMES.length, 48);
   for (const n of NAMES) assert.equal(sanitizeText(n), n, n);
 });
 
@@ -116,7 +124,7 @@ test("usefulness pipeline: the CLI exits 0 on a folder of those names and writes
   }
 });
 
-test("final gate: a credential label, a dash, then plain letters is a name (sentence end, cell or CSV quote too); colon values and digits stay blocked", () => {
+test("final gate: plain-letter names after a dash or a WEAK label are names; strong labels with any value, and weak labels with a value-looking token, are blocked", () => {
   const { scanText } = require("../src/gate");
   for (const ok of [
     "Credentials - Slack",
@@ -124,14 +132,21 @@ test("final gate: a credential label, a dash, then plain letters is a name (sent
     "Credentials - Google Sheets",
     "<td>Credentials - Slack</td><td>unknown</td>",
     '"Credentials - Slack","",""',
+    "Credentials: Slack",
+    "Token: refresh job",
+    "API Key: Rotation",
+    "Auth: Callback",
+    "Login: Alerts",
   ])
     assert.deepEqual(scanText(ok), [], ok);
   for (const bad of [
-    "Credentials: Slack",
     "password: tangerine",
     "password: Winter25x",
+    "secret = bluesky",
     "Credentials - ghp_abc123XYZ",
     "Credentials: Slack2024!",
+    "Token: ghp_abc123XYZ",
+    "API Key: sk-live-abc123",
   ])
     assert.ok(scanText(bad).length > 0, bad);
 });

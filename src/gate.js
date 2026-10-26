@@ -21,6 +21,7 @@ const {
   NATO,
   inLabelSet,
 } = require("./labels");
+const { isLabelledValue } = require("./value-rule");
 
 const LABEL_SET = new Set(ALL_LABELS);
 const SPLIT = /[\s"'<>()[\]{},;|=:\\：]+/;
@@ -267,6 +268,28 @@ function isGateStrong(tok) {
   return false;
 }
 
+// strong (password, pin, passcode, secret, rootpassword, kata sandi ...) or weak (token, key, auth, login ...)
+// for a label text; PIN-type code words count as strong. Null when the text is not a label at all.
+const STRONG_SUFFIX = SUFFIX_LABELS.filter(
+  (l) => STRONG_LABELS.has(l) || PIN_LABELS.has(l),
+);
+function strongLabel(text) {
+  const w = gateWords(text);
+  for (let a = 0; a < w.length; a++)
+    for (let b = a + 1; b <= Math.min(w.length, a + 3); b++) {
+      const s = w.slice(a, b).join("");
+      if (inLabelSet(STRONG_LABELS, s) || inLabelSet(PIN_LABELS, s))
+        return true;
+    }
+  return w.some((x) =>
+    STRONG_SUFFIX.some((l) => x.length > l.length && x.endsWith(l)),
+  );
+}
+function labelKind(text) {
+  if (strongLabel(text)) return "strong";
+  return isGateLabel(text) ? "weak" : null;
+}
+
 function labelValuePass(line, add) {
   // tokens as before; `breaks` marks the first token of each markup segment (a table cell, a tag)
   const toks = [];
@@ -285,7 +308,8 @@ function labelValuePass(line, add) {
     const m = /^["'`(\[]*([^:=\s"'`]{1,48})["'`]?([:=])["'`]?(.*)$/u.exec(t);
     if (m && isGateLabel(m[1])) {
       const v = m[3].replace(/^["'`]+|["'`,;]+$/g, "");
-      if (nonEmptyValue(v)) {
+      const kind = labelKind(m[1]);
+      if (nonEmptyValue(v) && isLabelledValue(kind, v)) {
         add("credential label with an attached value");
         continue;
       }
@@ -293,6 +317,7 @@ function labelValuePass(line, add) {
         !v &&
         i + 1 < toks.length &&
         nonEmptyValue(toks[i + 1]) &&
+        isLabelledValue(kind, toks[i + 1]) &&
         !MARK_TOKENS.has(toks[i + 1])
       ) {
         add("credential label followed by a value");
@@ -336,12 +361,11 @@ function labelValuePass(line, add) {
             break;
           }
     }
-    if (
-      marked &&
-      p < toks.length &&
-      nonEmptyValue(toks[p].replace(/^["'`]+|["'`,;]+$/g, ""))
-    ) {
-      // ordinary names ("Credentials - Slack.", "Credentials: Google Sheets") are not values
+    const kind = labelKind(toks.slice(i, i + span).join(""));
+    const val =
+      p < toks.length ? toks[p].replace(/^["'`]+|["'`,;]+$/g, "") : "";
+    if (marked && nonEmptyValue(val) && isLabelledValue(kind, val)) {
+      // ordinary names ("Credentials - Slack.", "Password - Reset Flow") are not values
       if (dashOnly && plainRun(toks, p, breaks)) continue;
       add("credential label followed by an assigned value");
     }
@@ -446,7 +470,11 @@ function scanText(text) {
         const lab1 = t.replace(EDGE, "").toLowerCase().replace(/[-_]/g, "");
         const lab2 =
           lab1 + (tokens[k + 1] || "").replace(EDGE, "").toLowerCase();
-        const pinAt = inLabelSet(PIN_LABELS, lab1) ? 1 : inLabelSet(PIN_LABELS, lab2) ? 2 : 0;
+        const pinAt = inLabelSet(PIN_LABELS, lab1)
+          ? 1
+          : inLabelSet(PIN_LABELS, lab2)
+            ? 2
+            : 0;
         if (pinAt) {
           const after = tokens.slice(k + pinAt, k + pinAt + 7);
           if (

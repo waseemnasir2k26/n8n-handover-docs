@@ -19,6 +19,7 @@ const {
   inLabelSet,
   labelVariants,
 } = require("./labels");
+const { isLabelledValue } = require("./value-rule");
 
 const CONNECTORS = new Set([
   ":",
@@ -336,8 +337,12 @@ function kwKind(tok) {
   let best = whole;
   for (const word of w) {
     const lw = fold(word);
-    if (SUFFIX_LABELS.some((lab) => lw.length > lab.length && lw.endsWith(lab))) {
-      const k = kwKindWhole(SUFFIX_LABELS.find((lab) => lw.length > lab.length && lw.endsWith(lab)));
+    if (
+      SUFFIX_LABELS.some((lab) => lw.length > lab.length && lw.endsWith(lab))
+    ) {
+      const k = kwKindWhole(
+        SUFFIX_LABELS.find((lab) => lw.length > lab.length && lw.endsWith(lab)),
+      );
       if (k === "strong") return k;
       if (k) best = k;
     }
@@ -357,7 +362,9 @@ function kwKind(tok) {
 function kwKindWhole(tok) {
   const c = fold(String(tok).replace(EDGE, "")).replace(/[-_\s]/g, "");
   if (!c || cpLen(c) > 24) return null;
-  const variants = labelVariants(c).filter((v, i, a) => v && a.indexOf(v) === i);
+  const variants = labelVariants(c).filter(
+    (v, i, a) => v && a.indexOf(v) === i,
+  );
   if (/^[a-z0-9@$!]+$/.test(c)) {
     variants.push(leet(c));
     if (c.length >= 5) variants.push(c.split("").reverse().join(""));
@@ -420,7 +427,14 @@ function pinLabelSpan(tokens, i) {
   const words = rawWords.map((w) => labelKey(w));
   if (words.some((w) => inLabelSet(PIN_LABELS, w))) return 1;
   // glued to a prefix: DBPIN (all capitals), DBcvv, rootcvc
-  if (rawWords.some((w) => (/^[A-Z0-9]{4,}$/.test(w) && labelKey(w).endsWith("pin")) || /[a-z0-9](cvv2?|cvc2?)$/i.test(w))) return 1;
+  if (
+    rawWords.some(
+      (w) =>
+        (/^[A-Z0-9]{4,}$/.test(w) && labelKey(w).endsWith("pin")) ||
+        /[a-z0-9](cvv2?|cvc2?)$/i.test(w),
+    )
+  )
+    return 1;
   for (let a = 0; a + 1 < words.length; a++)
     if (inLabelSet(PIN_LABELS, words[a] + words[a + 1])) return 1;
   if (i + 1 < tokens.length) {
@@ -618,7 +632,11 @@ function sanitizeText(input, opts = {}) {
         if (MARKERS.has(tokens[jj].toLowerCase())) exp = true;
         jj++;
       }
-      if (jj < n && !redactedRe.test(tokens[jj]) && (exp || valueLike(tokens[jj]))) {
+      if (
+        jj < n &&
+        !redactedRe.test(tokens[jj]) &&
+        (exp || valueLike(tokens[jj]))
+      ) {
         mark[jj] = true;
         i += pinSpan - 1;
         continue;
@@ -648,15 +666,15 @@ function sanitizeText(input, opts = {}) {
     }
     // attached assignment: api_key=VALUE, password:VALUE, "token":"VALUE"
     const m = /^["'`]?([^:=\s"'`]{1,40})["'`]?([:=])["'`]?(.+)$/u.exec(t);
-    if (m && !t.includes("://") && kwKind(m[1])) {
+    const attachedKind = m && !t.includes("://") ? kwKind(m[1]) : null;
+    if (
+      attachedKind &&
+      (attachedKind === "strong" || isLabelledValue("weak", m[3]))
+    ) {
       partial.set(i, `${m[1]}${m[2]}[redacted]`);
       continue;
     }
-    if (
-      m &&
-      pinLabelSpan([m[1]], 0) &&
-      !redactedRe.test(m[3])
-    ) {
+    if (m && pinLabelSpan([m[1]], 0) && !redactedRe.test(m[3])) {
       partial.set(i, `${m[1]}${m[2]}[redacted]`);
       continue;
     }
@@ -754,14 +772,11 @@ function sanitizeText(input, opts = {}) {
           mark[q] = true;
           if (/[.;]$/.test(tokens[q])) break;
         }
-      } else if (noteMode && explicit && k === "weak") {
-        for (let q = j; q < Math.min(n, j + 3); q++) {
-          if (/^[-/–—]$/.test(tokens[q])) continue;
-          mark[q] = true;
-        }
       } else if (
-        valueLike(tokens[j]) ||
-        (k === "strong" && /^\p{Nd}{3,12}$/u.test(tokens[j]))
+        // weak labels (token, key, login, credentials ...): only a value-shaped token; plain words stay
+        (k === "weak" && isLabelledValue("weak", tokens[j])) ||
+        (k === "strong" &&
+          (valueLike(tokens[j]) || /^\p{Nd}{3,12}$/u.test(tokens[j])))
       ) {
         mark[j] = true;
         if (
@@ -771,9 +786,6 @@ function sanitizeText(input, opts = {}) {
           !redactedRe.test(tokens[j + 1])
         )
           mark[j + 1] = true;
-      } else if (explicit && !redactedRe.test(tokens[j])) {
-        // label + explicit marker + anything: that is an assignment
-        mark[j] = true;
       }
     }
     if (k === "strong") {
