@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.3 - 2026-10-26
+
+- Fixed a leak: `Password - Slack abc123xyz` kept `abc123xyz` (the rule checked only the first word after the dash). The dash, colon and `=` rules now check every word after the label. A name keeps the rest only when every word is a safe word (letters only, at most 12 letters, no capital after the first letter, or an allow-listed noun, or a reporting period Q1-Q4 / H1-H2 / FY26). Any other word makes the whole rest the value: `Password - Slack abc123xyz` becomes `Password - [redacted]`, `Token - Sheet Zx9Kq2` becomes `Token - [redacted]`, `Secret: Slack 7f3a9b2c` becomes `Secret: [redacted]`.
+- Kept as before: `Password - Reset Flow`, `Credentials - Slack`, `Key Accounts: weekly sync`, `Password - Slack Reset Flow`, `PIN Code Generator - Sheet`, `Secret Key - Rotation`, `Key Results: Q3 Growth`. A single word after a dash still needs the allow-list (`Password - Zebra` is redacted).
+- Changed: `Nightly backup password: Winter2026!! then email` now redacts `then email` too (the remainder holds an unsafe word, so it is the value). A remainder of safe words only keeps them.
+- Gate: a table cell (`|`) ends a name; a markdown link target (`[Auth - Callback](auth-callback.md)`) and a CSV mark (`"Credentials - Slack","true"`) are not part of the name.
+- Fuzz: 216 new shapes `<label> - <allow-listed noun> <random value>` (labels Password, Secret, Token, API Key; separators `-`, `:`, en dash; values abc123xyz, Zx9Kq2, 7f3a9b2c). `npm run fuzz` now plants 3057 cases, 0 leaks with exit 0; 244 injected cases stopped by the gate.
+- Correction to 1.0.2: `Secret Key - Rotation` is kept (exit 0), as the 1.0.2 entry said. It was not reproduced as exit 3 in this release's checks.
+- `test/round8.test.js` covers the regressions above.
+
 ## 1.0.2 - 2026-10-26
 
 - Dash rule fails closed: after a label phrase and a dash, ONE token that ends the name is redacted unless it is an allow-listed workflow noun (sheet, recipe, flow, sync, slack, reset, rotation, ...) or an n8n node type name in the workflow. `Key Accounts - Tangerine`, `Secret Santa - Tangerine`, `Password - Zebra` are redacted; `PIN Code Generator - Sheet`, `Secret Sauce - Recipe`, `Credentials - Slack`, `Password - Reset Flow` stay. ":" and "=" are unchanged.

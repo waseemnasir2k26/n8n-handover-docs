@@ -45,9 +45,10 @@ test("credential word alone is not a secret; a value after it is the only thing 
     sanitizeText("Call CRM api_key=" + "Zq8wRt5Yu3Kp9mX2"),
     "Call CRM api_key=[redacted]",
   );
+  // 1.0.3: the remainder holds an unsafe token (Winter2026!!), so the whole remainder is the value
   assert.equal(
     sanitizeText("Nightly backup password: " + "Winter" + "2026!! then email"),
-    "Nightly backup password: [redacted] then email",
+    "Nightly backup password: [redacted]",
   );
   assert.equal(
     sanitizeText("Whiskey stock password is horse battery staple"),

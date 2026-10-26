@@ -1,6 +1,6 @@
 {
   "name": "n8n-handover-docs",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Generate a client handover pack (plain-English docs, Mermaid flowcharts, credential inventory, 'when it breaks' runbook) from n8n workflows.",
   "license": "MIT",
   "author": "Waseem Nasir <info@skynetjoe.com> (https://skynetjoe.com)",

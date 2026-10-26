@@ -25,6 +25,7 @@ const {
   isLabelledValue,
   labelledValue,
   nextToken,
+  tailOf,
   separatorAt,
   separatorKindAt,
   separatorKind,
@@ -279,8 +280,13 @@ function labelValuePass(line, add) {
   // tokens as before; `breaks` marks the first token of each markup segment (a table cell, a tag)
   const toks = [];
   const breaks = new Set();
-  line.split(/<[^>]*>/).forEach((seg) => {
-    const ws = seg.replace(/\|/g, " ").split(/\s+/).filter(Boolean);
+  // a table cell (|) and a tag (<...>) both end a name: the tail of a label never runs into the next cell
+  line.split(/<[^>]*>|\|/).forEach((seg) => {
+    // a markdown link target is not part of the name: "[Auth - Callback](auth-callback.md)" -> "Callback]"
+    const ws = seg
+      .replace(/\]\([^)\s]*\)/g, "]")
+      .split(/\s+/)
+      .filter(Boolean);
     if (ws.length && toks.length) breaks.add(toks.length);
     toks.push(...ws);
   });
@@ -333,7 +339,9 @@ function labelValuePass(line, add) {
     // the separator this marker is: ":" / "=" / "-" (a dash), or null for is, ->, ...
     const markSep =
       [toks[i + span - 1], ...markToks]
-        .map((t) => (/[:=]$/.test(t) ? t.slice(-1) : DASH_MARKS.has(t) ? "-" : null))
+        .map((t) =>
+          /[:=]$/.test(t) ? t.slice(-1) : DASH_MARKS.has(t) ? "-" : null,
+        )
         .find(Boolean) || null;
     if (!marked) {
       // "the password for the CRM is X": a marker word a few words later
@@ -346,11 +354,23 @@ function labelValuePass(line, add) {
           }
     }
     const kind = labelKind(toks.slice(i, i + span).join(""));
-    const val =
-      p < toks.length ? toks[p].replace(/^["'`]+|["'`,;]+$/g, "") : "";
-    const next = nextToken(toks, p + 1, breaks);
+    // the value and the rest of its word are split at CSV and bracket marks, as in separatorPass
+    const pieces =
+      p < toks.length
+        ? toks[p].split(/[\s"'`,;()[\]{}“”‘’]+/).filter(Boolean)
+        : [];
+    const val = pieces.length ? pieces[0] : "";
+    const rest = [
+      ...pieces.slice(1),
+      ...tailOf(toks, p + 1, breaks).map((x) => x.text),
+    ];
+    const next = rest.length ? rest[0] : null;
     // ordinary names ("Credentials - Slack", "Token: refresh job") are not values (src/value-rule.js)
-    if (marked && nonEmptyValue(val) && labelledValue(kind, markSep, val, next)) {
+    if (
+      marked &&
+      nonEmptyValue(val) &&
+      labelledValue(kind, markSep, val, next, rest)
+    ) {
       add("credential label followed by an assigned value");
     }
   }
@@ -365,8 +385,13 @@ const labelWord = (t) => {
 function separatorPass(line, add) {
   const toks = [];
   const breaks = new Set();
-  line.split(/<[^>]*>/).forEach((seg) => {
-    const ws = seg.replace(/\|/g, " ").split(/\s+/).filter(Boolean);
+  line.split(/<[^>]*>|\|/).forEach((seg) => {
+    // a markdown link target is not part of the name: "[Auth - Callback](auth-callback.md)" -> "Callback".
+    // A CSV or bracket mark ends a word too: `"Credentials - Slack","true"` has the value Slack, then true.
+    const ws = seg
+      .replace(/\]\([^)\s]*\)/g, "]")
+      .split(/[\s"'`,;()[\]{}“”‘’]+/)
+      .filter(Boolean);
     if (ws.length && toks.length) breaks.add(toks.length);
     toks.push(...ws);
   });
@@ -375,7 +400,11 @@ function separatorPass(line, add) {
     if (!sep || sep.value === null) continue;
     const kind = separatorKindAt(sep, labelKind);
     const v = sep.value.replace(/^["'`]+|["'`,;]+$/g, "");
-    if (kind && nonEmptyValue(v) && labelledValue(kind, sep.sep, v, sep.next))
+    if (
+      kind &&
+      nonEmptyValue(v) &&
+      labelledValue(kind, sep.sep, v, sep.next, sep.rest)
+    )
       add("credential label phrase followed by an assigned value");
   }
 }

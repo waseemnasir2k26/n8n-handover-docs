@@ -524,8 +524,11 @@ function sanitizeText(input, opts = {}) {
     const sep = separatorAt(tokens, i);
     if (!sep || sep.value === null || redactedRe.test(sep.value)) continue;
     const kind = separatorKindAt(sep, policyWordKind);
-    if (!kind || !labelledValue(kind, sep.sep, sep.value, sep.next)) continue;
+    if (!kind || !labelledValue(kind, sep.sep, sep.value, sep.next, sep.rest))
+      continue;
     if (sep.attached) partial.set(i, `${sep.base}${sep.sep}[redacted]`);
+    // 1.0.3: when the remainder holds a token that is not a safe word, the whole remainder is the value
+    else if (sep.unsafe) for (const t of sep.tail) mark[t.idx] = true;
     else mark[sep.valueIdx] = true;
   }
 

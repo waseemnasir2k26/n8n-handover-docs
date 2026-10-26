@@ -11,11 +11,15 @@
 //     its words is strong ("Secret Key: tangerine", "Admin Password: tangerine", "Door PIN: 4821").
 //   fold(): diacritics, combining marks and look-alike letters are folded BEFORE any label matching
 //     ("Passwörd", "Pásswórd", "Sécret" are the labels password and secret).
+//   1.0.3 (fail closed, the whole remainder): every token after the separator is checked with safeWord().
+//     A name keeps the remainder only if EVERY token is a safe word; any other token makes the whole remainder
+//     the value ("Password - Slack abc123xyz", "Token - Sheet Zx9Kq2", "Secret: Slack 7f3a9b2c"). Reporting
+//     periods (Q1-Q4, H1-H2, FY26) count as safe words ("Key Results: Q3 Growth").
 //   dash (" - ", standalone token): strong + dash + ONE token at the end of the name -> the token is the
-//     value ("Secret - tangerine"); strong + dash + two or more plain words -> a name ("Password - Reset Flow").
-//     weak + dash + any plain word -> a name ("Credentials - Slack"); a value-shaped token -> the value.
-//   weak + ":" + ONE plain token at the end of the name -> the value ("Token: Zebra", "Access Token: zebra");
-//     weak + ":" + two or more plain words -> a name ("Token: refresh job").
+//     value ("Secret - tangerine"); strong + dash + two or more safe words -> a name ("Password - Reset Flow").
+//     weak + dash + safe words -> a name ("Credentials - Slack").
+//   weak + ":" + ONE safe token at the end of the name -> the value ("Token: Zebra", "Access Token: zebra");
+//     weak + ":" + two or more safe words -> a name ("Token: refresh job").
 //   ALLOW_PHRASES: label words inside these phrases are not labels ("Secret Santa", "Key Accounts").
 //     With ":", "=" or a dash and ONE token ending the name, that token is a weak-label value
 //     ("Key Accounts: tangerine", "Key Accounts - tangerine"); two or more plain words stay a name.
@@ -227,28 +231,49 @@ function isKeptNoun(token) {
   return k !== "" && (KEPT_NOUNS.has(k) || NODE_TYPE_NAMES.has(k));
 }
 
+// 1.0.3: a "safe word" is the only kind of token a name may carry after a label. Letters only (an optional
+// ' or - inside), at most 12 letters, no capital after the first letter; an allow-listed noun always passes.
+// Any digit, other symbol, mixed case (aBc, camelCase, GoogleSheets unless it is a kept noun) or longer
+// word makes the token a possible value, so the whole remainder of the name is treated as the value.
+const SAFE_WORD_MAX = 12;
+function safeWord(token) {
+  const c = String(token == null ? "" : token)
+    .replace(EDGE_OPEN, "")
+    .replace(EDGE_CLOSE, "");
+  if (DASH_TOKENS.has(c)) return true;
+  // reporting periods are names, not values ("Key Results: Q3 Growth", "Key Results - Q4 review")
+  if (/^(?:Q[1-4]|H[12]|FY\d{2})$/i.test(c)) return true;
+  if (!/^\p{L}[\p{L}'’-]*$/u.test(c)) return false;
+  if (isKeptNoun(c)) return true;
+  return [...c].length <= SAFE_WORD_MAX && !/\p{Lu}/u.test(c.slice(1));
+}
+
 /**
  * The shared decision for a token after a label phrase and a separator.
  *   sep: ":" | "=" | "-" (a dash) | null (any other marker: falls back to isLabelledValue).
  *   next: the token after this one in the same segment, or null when the name ends here.
- * True when the token is the credential value.
+ *   rest: every token after this one in the same segment (default [next]). ALL of them are checked (1.0.3).
+ * True when the token is the credential value; the caller then redacts the token and its rest.
  */
-function labelledValue(kind, sep, token, next) {
+function labelledValue(kind, sep, token, next, rest) {
   const c = String(token == null ? "" : token);
   if (!/[\p{L}\p{N}]/u.test(c) || /^\?\[?redacted/i.test(c)) return false;
   if (sep === "=") return true;
   if (sep !== ":" && sep !== "-") return isLabelledValue(kind, c);
+  const tail = [c, ...(rest !== undefined ? rest : next == null ? [] : [next])];
   if (kind === "strong") {
     if (sep === ":") return true;
-    // dash: two or more plain words are a name; one kept noun that ends the name is a name too
-    if (plainWord(c) && next != null && plainWord(next)) return false;
-    return !(next == null && isKeptNoun(c));
+    // dash: any token that is not a safe word makes the remainder a value
+    if (!tail.every(safeWord)) return true;
+    // safe words only: a name, except ONE token that is not an allow-listed noun ("Password - Zebra")
+    return tail.length === 1 && !isKeptNoun(c);
   }
   if (kind !== "weak") return false;
-  if (valueShaped(c)) return true;
-  if (sep === "-") return false; // weak + dash + plain words: a name
-  // weak + ":": one plain word that ends the name is the value
-  return next == null && plainWord(c);
+  // a value-shaped token (digit, symbol, key shape, long random run) is never a safe word, so it is a value here
+  if (!tail.every(safeWord)) return true;
+  if (sep === "-") return false; // weak + dash + safe words: a name ("Credentials - Slack Alerts")
+  // weak + ":": one safe word that ends the name is the value; two or more safe words are a name
+  return tail.length === 1;
 }
 
 /**
@@ -291,6 +316,22 @@ function nextToken(tokens, idx, breaks = new Set()) {
  * value is the token (or attached text) after the separator, null when there is none; next is the
  * token after the value in the same segment, or null.
  */
+/**
+ * The tokens from idx to the end of the segment (a break or a name end), each as its text (nextToken cut).
+ * Whitespace-only tokens are skipped. Used for the remainder check and for redaction (1.0.3).
+ */
+function tailOf(tokens, idx, breaks = new Set()) {
+  const out = [];
+  for (let j = idx; j < tokens.length; j++) {
+    if (breaks.has(j)) break;
+    if (String(tokens[j]).trim() === "") continue;
+    const text = nextToken(tokens, j, breaks);
+    if (text === null) break;
+    out.push({ idx: j, text });
+  }
+  return out;
+}
+
 function separatorAt(tokens, i, breaks = new Set()) {
   const t = String(tokens[i]);
   let sep;
@@ -314,30 +355,43 @@ function separatorAt(tokens, i, breaks = new Set()) {
   const raw = base === null ? before : [...before, base];
   const words = stripAllowed(raw);
   const attached = value !== null;
-  if (!attached && i + 1 < tokens.length) value = String(tokens[i + 1]);
-  const valueIdx = attached ? i : i + 1;
-  const next = nextToken(tokens, valueIdx + 1, breaks);
-  // An allow-listed phrase is never a label by itself. "Key Accounts: tangerine" (":" or "=", ONE token,
-  // end of name) is a weak label for that token; two or more words after it are a name.
-  // A dash ("Key Accounts - Tangerine", "Secret Santa - tangerine") takes the same rule, applied as ":",
-  // unless the one token is an allow-listed noun or n8n node type ("PIN Code Generator - Sheet" stays a name).
-  const allowedSingle =
+  let valueIdx = i;
+  if (!attached) {
+    valueIdx = i + 1;
+    while (valueIdx < tokens.length && String(tokens[valueIdx]).trim() === "")
+      valueIdx++;
+    if (valueIdx < tokens.length) value = String(tokens[valueIdx]);
+  }
+  // every token after the value in this segment: the whole remainder is checked, and redacted when it is a value
+  const tail = attached ? [] : tailOf(tokens, valueIdx, breaks);
+  const after = attached ? tailOf(tokens, i + 1, breaks) : tail.slice(1);
+  const next = after.length ? after[0].text : null;
+  const rest = after.map((x) => x.text);
+  // An allow-listed phrase is never a label by itself. With only that phrase before the separator, the
+  // value is a weak label for the remainder, applied as ":" ("Key Accounts: tangerine" is a value,
+  // "Key Accounts: weekly sync" a name, "Key Accounts - Tangerine abc123" a value). A dash followed by ONE
+  // allow-listed noun or n8n node type stays a name ("PIN Code Generator - Sheet").
+  const allowedOnly =
     raw.length > words.length &&
+    words.length === 0 &&
     (sep === ":" || sep === "=" || sep === "-") &&
-    value !== null &&
-    next === null &&
-    !(sep === "-" && isKeptNoun(value));
-  if (!words.length && !allowedSingle) return null;
-  const applied = sep === "-" && allowedSingle ? ":" : sep;
+    value !== null;
+  if (!words.length && !allowedOnly) return null;
+  if (allowedOnly && sep === "-" && rest.length === 0 && isKeptNoun(value))
+    return null;
   return {
-    sep: applied,
+    sep: allowedOnly ? ":" : sep,
     base,
     words,
     value,
     valueIdx,
     attached,
     next,
-    allowedSingle,
+    rest,
+    tail,
+    // the value is a run of unsafe tokens: the whole remainder goes ("Password - Slack abc123xyz")
+    unsafe: !tail.every((t) => safeWord(t.text)),
+    allowedSingle: allowedOnly,
   };
 }
 
@@ -379,6 +433,8 @@ module.exports = {
   isWordToken,
   labelledValue,
   nextToken,
+  tailOf,
+  safeWord,
   stripAllowed,
   plainWord,
   isKeptNoun,
