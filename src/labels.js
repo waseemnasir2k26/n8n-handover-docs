@@ -189,7 +189,18 @@ const all = (k) => Object.values(BY_LANG).flatMap((l) => l[k] || []);
 // A label glued to a prefix with no separator (DBpwd, rootpassword, mytoken, DBPIN). Long, unambiguous words only.
 const SUFFIX_LABELS = ['password', 'passwd', 'passwort', 'kennwort', 'passphrase', 'passcode', 'secret', 'secreto', 'segredo', 'token', 'pwd', 'cvv', 'cvc', 'zugangscode', 'contrasena', 'motdepasse', 'apikey', 'authtoken', 'credentials', 'credential'];
 
+// Label variants: "password1", "pass2", "pin2", "apikey2" match their label (trailing digits or
+// underscores dropped), and "passwords" matches "password" (plural s dropped). The bare word is tried first.
+function labelVariants(w) {
+  const l = String(w).toLowerCase().normalize("NFKC");
+  const base = l.replace(/[\p{N}_]+$/u, "");
+  return [l, base, base.replace(/s$/, "")];
+}
+const inLabelSet = (set, w) => labelVariants(w).some((v) => set.has(v));
+
 module.exports = {
+  inLabelSet,
+  labelVariants,
   SUFFIX_LABELS,
   BY_LANG,
   LANGUAGES: Object.keys(BY_LANG),

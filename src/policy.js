@@ -16,6 +16,8 @@ const {
   PIN_LABELS,
   SPOKEN_DIGITS,
   NATO,
+  inLabelSet,
+  labelVariants,
 } = require("./labels");
 
 const CONNECTORS = new Set([
@@ -355,7 +357,7 @@ function kwKind(tok) {
 function kwKindWhole(tok) {
   const c = fold(String(tok).replace(EDGE, "")).replace(/[-_\s]/g, "");
   if (!c || cpLen(c) > 24) return null;
-  const variants = [c];
+  const variants = labelVariants(c).filter((v, i, a) => v && a.indexOf(v) === i);
   if (/^[a-z0-9@$!]+$/.test(c)) {
     variants.push(leet(c));
     if (c.length >= 5) variants.push(c.split("").reverse().join(""));
@@ -416,11 +418,11 @@ const labelKey = (t) =>
 function pinLabelSpan(tokens, i) {
   const rawWords = compoundWords(tokens[i]);
   const words = rawWords.map((w) => labelKey(w));
-  if (words.some((w) => PIN_LABELS.has(w))) return 1;
+  if (words.some((w) => inLabelSet(PIN_LABELS, w))) return 1;
   // glued to a prefix: DBPIN (all capitals), DBcvv, rootcvc
   if (rawWords.some((w) => (/^[A-Z0-9]{4,}$/.test(w) && labelKey(w).endsWith("pin")) || /[a-z0-9](cvv2?|cvc2?)$/i.test(w))) return 1;
   for (let a = 0; a + 1 < words.length; a++)
-    if (PIN_LABELS.has(words[a] + words[a + 1])) return 1;
+    if (inLabelSet(PIN_LABELS, words[a] + words[a + 1])) return 1;
   if (i + 1 < tokens.length) {
     const next = compoundWords(tokens[i + 1]).map((w) => labelKey(w));
     if (next.length && PIN_LABELS.has(labelKey(tokens[i]) + next[0])) return 2;

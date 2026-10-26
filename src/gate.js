@@ -19,6 +19,7 @@ const {
   SUFFIX_LABELS,
   SPOKEN_DIGITS,
   NATO,
+  inLabelSet,
 } = require("./labels");
 
 const LABEL_SET = new Set(ALL_LABELS);
@@ -155,6 +156,9 @@ function decodeLine(raw) {
 
 // ---- labels inside compounds (DB-Password, db_password, dbPassword, Login-PIN) ----
 const GATE_LABELS = new Set([...LABEL_SET, ...PIN_LABELS]);
+// a dash between a label and a plain dictionary word ("Password - reset email") is prose, not an assignment
+const DASH_MARKS = new Set(["-", "–", "—"]);
+const PLAIN_WORD = /^\p{L}+$/u;
 const MARK_TOKENS = new Set([
   ":",
   "=",
@@ -200,7 +204,7 @@ function isGateLabelExact(joined) {
     .toLowerCase()
     .normalize("NFKC")
     .replace(/[^\p{L}\p{N}]/gu, "");
-  return GATE_LABELS.has(w);
+  return inLabelSet(GATE_LABELS, w);
 }
 // n8n credential type identifiers (httpHeaderAuth, slackApi, googleSheetsOAuth2Api) are part of every pack
 const CRED_TYPE_ID =
@@ -212,7 +216,7 @@ function isGateLabel(tok) {
   const w = gateWords(tok);
   for (let a = 0; a < w.length; a++) {
     for (let b = a + 1; b <= Math.min(w.length, a + 3); b++)
-      if (GATE_LABELS.has(w.slice(a, b).join(""))) return true;
+      if (inLabelSet(GATE_LABELS, w.slice(a, b).join(""))) return true;
   }
   return false;
 }
@@ -237,7 +241,7 @@ function isGateStrong(tok) {
   const w = gateWords(tok);
   for (let a = 0; a < w.length; a++)
     for (let b = a + 1; b <= Math.min(w.length, a + 3); b++)
-      if (STRONG_GATE.has(w.slice(a, b).join(""))) return true;
+      if (inLabelSet(STRONG_GATE, w.slice(a, b).join(""))) return true;
   return false;
 }
 
@@ -283,12 +287,18 @@ function labelValuePass(line, add) {
     if (!span || (span === 1 && !isGateLabel(t))) continue;
     let p = i + span;
     let marked = /[:=]$/.test(toks[p - 1]);
+    const markToks = [];
     if (!marked && p < toks.length && MARK_TOKENS.has(toks[p].toLowerCase())) {
       marked = true;
+      markToks.push(toks[p]);
       p++;
     }
     while (marked && p < toks.length && MARK_TOKENS.has(toks[p].toLowerCase()))
-      p++;
+      markToks.push(toks[p++]);
+    const dashOnly =
+      !/[:=]$/.test(toks[i + span - 1]) &&
+      markToks.length > 0 &&
+      markToks.every((t) => DASH_MARKS.has(t));
     if (!marked) {
       // "the password for the CRM is X": a marker word a few words later
       if (isGateStrong(toks.slice(i, i + span).join("")))
@@ -303,8 +313,12 @@ function labelValuePass(line, add) {
       marked &&
       p < toks.length &&
       nonEmptyValue(toks[p].replace(/^["'`]+|["'`,;]+$/g, ""))
-    )
+    ) {
+      // the value's own word, not what a CSV quote or comma glued to it
+      const core = toks[p].replace(/^["'`([]+/, "").split(/["'`,;)\]]/)[0];
+      if (dashOnly && PLAIN_WORD.test(core)) continue;
       add("credential label followed by an assigned value");
+    }
   }
 }
 
@@ -406,7 +420,7 @@ function scanText(text) {
         const lab1 = t.replace(EDGE, "").toLowerCase().replace(/[-_]/g, "");
         const lab2 =
           lab1 + (tokens[k + 1] || "").replace(EDGE, "").toLowerCase();
-        const pinAt = PIN_LABELS.has(lab1) ? 1 : PIN_LABELS.has(lab2) ? 2 : 0;
+        const pinAt = inLabelSet(PIN_LABELS, lab1) ? 1 : inLabelSet(PIN_LABELS, lab2) ? 2 : 0;
         if (pinAt) {
           const after = tokens.slice(k + pinAt, k + pinAt + 7);
           if (
