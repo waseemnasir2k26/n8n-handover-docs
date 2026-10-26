@@ -204,7 +204,8 @@ function inventoryCsv(items) {
     if (!m.services.length && !m.credentials.length)
       rows.push(csvRow([m.name, active, "", "", "", ""]));
   }
-  return rows.join("\r\n") + "\r\n";
+  // LF, not CRLF: matches .gitattributes (eol=lf), so a demo run leaves no git diff
+  return rows.join("\n") + "\n";
 }
 
 module.exports = {

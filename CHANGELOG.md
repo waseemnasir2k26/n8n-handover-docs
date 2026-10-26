@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 - 2026-10-26
+
+- Dash form of an allow-listed phrase redacts its value: `Key Accounts - tangerine`, `Secret Santa - tangerine` (also en and em dash). Two or more words after the dash stay a name (`Key Accounts - weekly sync`). The file name comes from the redacted name.
+- `inventory.csv` is written with LF line endings (matches `.gitattributes`), so `npm run demo` leaves no git diff.
+- `.gitleaksignore` comments no longer contain token-shaped fixtures; fingerprints added so `gitleaks detect` (git and `--no-git`) exits 0.
+
 ## 1.0.0 - 2026-10-25
 
 - First release: handover pack from exported workflow JSON or the live n8n public API (read-only).

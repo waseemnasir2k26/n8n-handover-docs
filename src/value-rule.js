@@ -17,7 +17,8 @@
 //   weak + ":" + ONE plain token at the end of the name -> the value ("Token: Zebra", "Access Token: zebra");
 //     weak + ":" + two or more plain words -> a name ("Token: refresh job").
 //   ALLOW_PHRASES: label words inside these phrases are not labels ("Secret Santa", "Key Accounts").
-//     With ":" or "=" and ONE token ending the name, that token is a weak-label value ("Key Accounts: tangerine").
+//     With ":", "=" or a dash and ONE token ending the name, that token is a weak-label value
+//     ("Key Accounts: tangerine", "Key Accounts - tangerine"); two or more plain words stay a name.
 // labelledValue() is the one decision for those rules; isLabelledValue() stays for attached / "is" forms.
 
 // Cyrillic / Greek letters that look like Latin ones. Used for MATCHING only.
@@ -85,7 +86,10 @@ const CONFUSABLES = {
 // Matching fold: NFKD + combining marks removed (Passwörd -> Password), lower-cased, look-alikes -> Latin.
 function fold(s) {
   let out = "";
-  for (const ch of String(s).normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase())
+  for (const ch of String(s)
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase())
     out += CONFUSABLES[ch] || ch;
   return out;
 }
@@ -238,15 +242,36 @@ function separatorAt(tokens, i, breaks = new Set()) {
   const next = nextToken(tokens, valueIdx + 1, breaks);
   // An allow-listed phrase is never a label by itself. "Key Accounts: tangerine" (":" or "=", ONE token,
   // end of name) is a weak label for that token; two or more words after it are a name.
+  // A dash ("Key Accounts - tangerine") takes the same ":" rule, applied as ":" below, but only for a
+  // value-looking token (lower-case or value-shaped). A Title Case word ("PIN Code Generator - Sheet",
+  // "Secret Sauce - Recipe") is a name, as before.
+  const dashValue = (v) => {
+    const c = String(v).replace(EDGE_OPEN, "").replace(EDGE_CLOSE, "");
+    return valueShaped(c) || /^\p{Ll}/u.test(c);
+  };
   const allowedSingle =
-    raw.length > words.length && (sep === ":" || sep === "=") && value !== null && next === null;
+    raw.length > words.length &&
+    (sep === ":" || sep === "=" || (sep === "-" && dashValue(value))) &&
+    value !== null &&
+    next === null;
   if (!words.length && !allowedSingle) return null;
-  return { sep, base, words, value, valueIdx, attached, next, allowedSingle };
+  const applied = sep === "-" && allowedSingle ? ":" : sep;
+  return {
+    sep: applied,
+    base,
+    words,
+    value,
+    valueIdx,
+    attached,
+    next,
+    allowedSingle,
+  };
 }
 
 /** The kind a separator applies to the token after it (see separatorKind); allowedSingle is a weak label. */
 function separatorKindAt(sep, kindOfWord) {
-  const phraseKind = phraseKindOf(sep.words, kindOfWord) || (sep.allowedSingle ? "weak" : null);
+  const phraseKind =
+    phraseKindOf(sep.words, kindOfWord) || (sep.allowedSingle ? "weak" : null);
   return separatorKind(sep.sep, phraseKind);
 }
 

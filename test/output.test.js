@@ -96,7 +96,9 @@ test("secret-pattern masking: location only, value never in the model", () => {
   for (const v of Object.values(SECRETS))
     assert.ok(!json.includes(v), "secret value leaked into findings");
   assert.equal(sanitizeText(`x ${SECRETS.openai} y`), "x [redacted] y");
-  assert.ok(!sanitizeText(`api_key="${SECRETS.assign}"`).includes(SECRETS.assign));
+  assert.ok(
+    !sanitizeText(`api_key="${SECRETS.assign}"`).includes(SECRETS.assign),
+  );
 });
 
 test("generated pack: no credential ids, workflow ids, secret values, or API key anywhere", async () => {
@@ -195,12 +197,12 @@ test("CSV: formula injection neutralised, quoting correct", async () => {
     connections: {},
   };
   const { files } = await generate([wf], { date: "2026-01-01" });
-  for (const row of files["inventory.csv"].trim().split("\r\n").slice(1)) {
+  for (const row of files["inventory.csv"].trim().split("\n").slice(1)) {
     for (const cell of row.match(/"(?:[^"]|"")*"/g))
       assert.ok(!/^"[=+\-@]/.test(cell), `unsafe cell ${cell}`);
   }
   assert.equal(
-    files["inventory.csv"].split("\r\n")[0],
+    files["inventory.csv"].split("\n")[0],
     '"workflow","active","service","credential_name","credential_type","nodes"',
   );
 });
@@ -247,23 +249,45 @@ test("write to disk", async () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('HTML diagram block keeps line breaks and equals the Markdown diagram source', async () => {
-  const { files } = await generate(allExamples(), { date: '2026-01-01' });
-  const html = files['index.html'];
-  const un = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
-  const blocks = [...html.matchAll(/<pre class="mermaid">([\s\S]*?)<\/pre>/g)].map((m) => un(m[1]));
+test("HTML diagram block keeps line breaks and equals the Markdown diagram source", async () => {
+  const { files } = await generate(allExamples(), { date: "2026-01-01" });
+  const html = files["index.html"];
+  const un = (s) =>
+    s
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, "&");
+  const blocks = [
+    ...html.matchAll(/<pre class="mermaid">([\s\S]*?)<\/pre>/g),
+  ].map((m) => un(m[1]));
   assert.equal(blocks.length, 5);
-  const md = files['lead-alerts-daily.md'];
+  const md = files["lead-alerts-daily.md"];
   const mdSrc = /```mermaid\n([\s\S]*?)```/.exec(md)[1];
   assert.ok(blocks.some((b) => b.trim() === mdSrc.trim()));
-  for (const b of blocks) assert.ok(b.startsWith('flowchart TD\n'));
+  for (const b of blocks) assert.ok(b.startsWith("flowchart TD\n"));
 });
 
-test('URLs inside names and sticky notes are hidden unless --show-hosts', () => {
-  const wf = { name: 'W https://client.example.test/x', nodes: [{ name: 'Note', type: 'n8n-nodes-base.stickyNote', parameters: { content: 'See https://internal-host.example.test/docs for details' } }], connections: {} };
+test("URLs inside names and sticky notes are hidden unless --show-hosts", () => {
+  const wf = {
+    name: "W https://client.example.test/x",
+    nodes: [
+      {
+        name: "Note",
+        type: "n8n-nodes-base.stickyNote",
+        parameters: {
+          content: "See https://internal-host.example.test/docs for details",
+        },
+      },
+    ],
+    connections: {},
+  };
   const hidden = JSON.stringify(analyzeWorkflow(wf, { includeNotes: true }));
-  assert.ok(!hidden.includes('example.test'));
-  assert.ok(hidden.includes('<url hidden>'));
-  const shown = JSON.stringify(analyzeWorkflow(wf, { showHosts: true, includeNotes: true }));
-  assert.ok(shown.includes('internal-host.example.test'));
+  assert.ok(!hidden.includes("example.test"));
+  assert.ok(hidden.includes("<url hidden>"));
+  const shown = JSON.stringify(
+    analyzeWorkflow(wf, { showHosts: true, includeNotes: true }),
+  );
+  assert.ok(shown.includes("internal-host.example.test"));
 });

@@ -1,7 +1,14 @@
-# Synthetic test fixtures only (ghp_abc123XYZ, sk-live-abc123), not real secrets. Fingerprints from gitleaks detect at commit 89e53c1.
+# Synthetic test fixtures only (ghp_… / sk-live-… style test tokens), not real secrets. Fingerprints from gitleaks detect at commit 89e53c1.
 89e53c183aeabdc580bf589dc6b6b3325d5fa0cb:README.md:generic-api-key:105
 89e53c183aeabdc580bf589dc6b6b3325d5fa0cb:test/usefulness-pipeline.test.js:generic-api-key:148
 89e53c183aeabdc580bf589dc6b6b3325d5fa0cb:test/usefulness-pipeline.test.js:generic-api-key:149
 89e53c183aeabdc580bf589dc6b6b3325d5fa0cb:test/value-rule.test.js:generic-api-key:24
-# test/value-rule.test.js:24 fixtures Token: ghp_abc123XYZ and API Key: sk-live-abc123 (synthetic, not real secrets). Fingerprint at commit 2eac589 (both findings share one fingerprint).
+# test/value-rule.test.js:24 fixtures: a Token: ghp_… and an API Key: sk-live-… test value (synthetic, not real secrets). Fingerprint at commit 2eac589 (both findings share one fingerprint).
 2eac58968ead01c6dfefe828fa817ae6fb17af74:test/value-rule.test.js:generic-api-key:24
+# d686ab9 .gitleaksignore:6 held the same fixture tokens in its comment (reworded in the next commit).
+d686ab9af1cb6cf7deee117fa256e9abc42a660f:.gitleaksignore:generic-api-key:6
+# --no-git (working tree) fingerprints for the same synthetic fixtures.
+test/value-rule.test.js:generic-api-key:40
+test/value-rule.test.js:generic-api-key:41
+test/usefulness-pipeline.test.js:generic-api-key:149
+test/usefulness-pipeline.test.js:generic-api-key:150
